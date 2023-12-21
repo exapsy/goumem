@@ -2,7 +2,10 @@
 
 Who said Go doesn't have manual memory allocation?
 
-Goumem is a library that provides manual memory allocation functions for Go.
+**NO NEED TO CALL C** and context switch to manually allocate memory.
+
+Goumem is a library that provides manual memory allocation functions for Go,
+the way C does it, by using `mmap`.
 
 ## Installation
 
@@ -22,14 +25,22 @@ import (
 
 func main() { 
     // Allocate an integer 
-    i, p := goumem.Int(2) // Returns an int and a pointer to it 
-    fmt.Printf("i: %d, p: %p\n", i, p)
-	
-    // Write to the allocated memory 
-    *p = 3
-    fmt.Printf("i: %d, p: %p\n", i, p)
-	
-    // Free the allocated memory
-    goumem.FreeInt(p)
+    i, err := goumem.NewInt()
+    if err != nil {
+        panic(err)
+    }
+		
+    // Set the value of the integer 
+    i.Set(42)
+    
+    // Get the value of the integer 
+    intVal := i.Val()
+    fmt.Println(intVal) // 42
+    
+    // Free the memory allocated for the integer 
+    err = i.Free()
+    if err != nil {
+        panic(fmt.Errorf("error freeing memory: %v", err))
+    }
 }
 ```
