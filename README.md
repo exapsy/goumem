@@ -13,7 +13,7 @@ the way C does it, by using `mmap`.
 go get github.com/exapsy/goumem
 ```
 
-## Usage
+## Example - Create an integer
 
 ```go
 package main
@@ -39,6 +39,38 @@ func main() {
     
     // Free the memory allocated for the integer 
     err = i.Free()
+    if err != nil {
+        panic(fmt.Errorf("error freeing memory: %v", err))
+    }
+}
+```
+
+## Example - Create a string
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/exapsy/goumem"
+)
+
+func main() {
+    // Allocate a string
+    s, err := goumem.NewString()
+    if err != nil {
+        panic(err)
+    }
+    
+    // Set the value of the string
+    s.Set("Hello World!")
+    
+    // Get the value of the string
+    strVal := s.Val()
+    fmt.Println(strVal) // Hello World!
+    
+    // Free the memory allocated for the string
+    err = s.Free()
     if err != nil {
         panic(fmt.Errorf("error freeing memory: %v", err))
     }
