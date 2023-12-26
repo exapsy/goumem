@@ -4,7 +4,7 @@ import "testing"
 
 func TestPool(t *testing.T) {
 	pool, err := New(Options{
-		Size: 8,
+		Size: 15, // 15 bytes - account for alignment but not enough to store 3x32-bit integers
 	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

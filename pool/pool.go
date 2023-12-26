@@ -18,7 +18,8 @@ type Options struct {
 }
 
 func New(opts Options) (*Pool, error) {
-	addr, err := goumem_syscall.Alloc(uintptr(opts.Size))
+	allocSize := opts.Size
+	addr, err := goumem_syscall.Alloc(uintptr(allocSize))
 	if err != nil {
 		return nil, fmt.Errorf("failed to make MMAP syscall: %w", err)
 	}
@@ -38,6 +39,23 @@ func (p Pool) PoolAddr() uintptr {
 // Alloc allocates memory inside the pool.
 // Basically not really allocating memory, just returning the current address and incrementing it.
 func (p *Pool) Alloc(size uint) (*Ptr, error) {
+	// Calculate the alignment for the requested size
+	alignment := uintptr(size)
+	if alignment < unsafe.Alignof(uintptr(0)) {
+		alignment = unsafe.Alignof(uintptr(0))
+	}
+
+	// Align the current address
+	misalignment := p.current % alignment
+	adjustment := uintptr(0)
+	if misalignment != 0 {
+		adjustment = alignment - misalignment
+	}
+
+	if p.current+adjustment+uintptr(size) > p.virtualAddr+uintptr(p.size) {
+		return &Ptr{}, fmt.Errorf("pool is full")
+	}
+
 	for i, addr := range p.freed {
 		if uintptr(size) <= addr {
 			// Remove this block from the freed list
@@ -47,9 +65,6 @@ func (p *Pool) Alloc(size uint) (*Ptr, error) {
 				PoolAddr:    p.virtualAddr,
 			}, nil
 		}
-	}
-	if p.current+uintptr(size) > p.virtualAddr+uintptr(p.size) {
-		return &Ptr{}, fmt.Errorf("pool is full")
 	}
 
 	addr := p.current
