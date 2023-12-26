@@ -13,66 +13,67 @@ the way C does it, by using `mmap`.
 go get github.com/exapsy/goumem
 ```
 
-## Example - Create an integer
+## Example - Create a pool
 
 ```go
 package main
 
 import (
 	"fmt"
-	"github.com/exapsy/goumem"
-)
-
-func main() { 
-    // Allocate an integer 
-    i, err := goumem.NewInt()
-    if err != nil {
-        panic(err)
-    }
-		
-    // Set the value of the integer 
-    i.Set(42)
-    
-    // Get the value of the integer 
-    intVal := i.Val()
-    fmt.Println(intVal) // 42
-    
-    // Free the memory allocated for the integer 
-    err = i.Free()
-    if err != nil {
-        panic(fmt.Errorf("error freeing memory: %v", err))
-    }
-}
-```
-
-## Example - Create a string
-
-```go
-package main
-
-import (
-    "fmt"
-    "github.com/exapsy/goumem"
+	goumempool "github.com/exapsy/goumem/pool"
 )
 
 func main() {
-    // Allocate a string
-    s, err := goumem.NewString()
-    if err != nil {
-        panic(err)
-    }
-    
-    // Set the value of the string
-    s.Set("Hello World!")
-    
-    // Get the value of the string
-    strVal := s.Val()
-    fmt.Println(strVal) // Hello World!
-    
-    // Free the memory allocated for the string
-    err = s.Free()
-    if err != nil {
-        panic(fmt.Errorf("error freeing memory: %v", err))
-    }
+	pool, err := goumempool.New(Options{
+		// Size of the pool in bytes
+        Size: 15,
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	// Allocate 2 times 4 bytes (8 bytes total)
+	addr, err := pool.Alloc(4)
+	if err != nil {
+		panic(fmt.Errorf("Alloc() error = %v", err))
+	}
+
+	addr.Set(456)
+	if addr.Int() != 456 {
+		panic(fmt.Errorf("Alloc() = %v, want 456", addr.Int()))
+	}
+
+	addr2, err := pool.Alloc(4)
+	if err != nil {
+		panic(fmt.Errorf("Alloc() error = %v", err))
+	}
+
+	addr2.Set(456)
+	if addr2.Int() != 456 {
+		panic(fmt.Errorf("Alloc() = %v, want 456", addr2.Int()))
+	}
+
+	// Free the first 4 bytes
+	err = pool.Free(addr, 4)
+	if err != nil {
+		panic(fmt.Errorf("Free() error = %v", err))
+	}
+
+	// Allocate 4 bytes again (should work since we freed 4 bytes)
+	addr3, err := pool.Alloc(4)
+	if err != nil {
+		panic(fmt.Errorf("Alloc() error = %v", err))
+	}
+
+	addr3.Set(456)
+	if addr3.Int() != 456 {
+		panic(fmt.Errorf("Alloc() = %v, want 456", addr3.Int()))
+	}
+
+	// Free the pool
+	err = pool.Close()
+	if err != nil {
+		panic(fmt.Errorf("Free() error = %v", err))
+	}
 }
 ```

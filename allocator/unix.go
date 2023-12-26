@@ -1,14 +1,20 @@
-//go:build linux
+//go:build darwin || dragonfly || freebsd || linux || nacl || netbsd || openbsd || solaris
 
 // Package goumem_syscall
-package goumem_syscall
+package allocator
 
 import (
 	"fmt"
 	"syscall"
 )
 
-func Alloc(size uintptr) (uintptr, error) {
+func New() MemoryAllocator {
+	return Unix{}
+}
+
+type Unix struct{}
+
+func (mau Unix) Alloc(size uintptr) (uintptr, error) {
 	syscallArgs := []uintptr{
 		0,
 		size,
@@ -28,13 +34,13 @@ func Alloc(size uintptr) (uintptr, error) {
 		syscallArgs[5],
 	)
 	if errno != 0 {
-		return 0, fmt.Errorf("failed to make MMAP syscall: %w", errno)
+		return 0, fmt.Errorf("failed to make MMAP allocator: %w", errno)
 	}
 
 	return mem, nil
 }
 
-func Free(addr, size uintptr) error {
+func (mau Unix) Free(addr, size uintptr) error {
 	syscallArgs := []uintptr{
 		addr,
 		size,
@@ -47,7 +53,7 @@ func Free(addr, size uintptr) error {
 		0,
 	)
 	if errno != 0 {
-		return fmt.Errorf("failed to make MUNMAP syscall: %w", errno)
+		return fmt.Errorf("failed to make MUNMAP allocator: %w", errno)
 	}
 
 	return nil

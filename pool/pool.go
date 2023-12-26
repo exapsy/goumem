@@ -2,9 +2,17 @@ package pool
 
 import (
 	"fmt"
-	goumem_syscall "github.com/exapsy/goumem/syscall"
+	"github.com/exapsy/goumem/allocator"
 	"sync"
 	"unsafe"
+)
+
+var (
+	ErrPoolFull = fmt.Errorf("pool is full")
+)
+
+var (
+	mem = allocator.New()
 )
 
 type Pool struct {
@@ -21,9 +29,9 @@ type Options struct {
 
 func New(opts Options) (*Pool, error) {
 	allocSize := opts.Size
-	addr, err := goumem_syscall.Alloc(uintptr(allocSize))
+	addr, err := mem.Alloc(uintptr(allocSize))
 	if err != nil {
-		return nil, fmt.Errorf("failed to make MMAP syscall: %w", err)
+		return nil, fmt.Errorf("failed to make MMAP allocator: %w", err)
 	}
 
 	return &Pool{
@@ -82,13 +90,13 @@ func (p *Pool) Alloc(size uint) (*Ptr, error) {
 }
 
 // Free frees memory inside the pool.
-// Basically not really freeing memory, just decrementing the current address.
+// Basically not really freeing memory, just decrementing the current address
 func (p *Pool) Free(address *Ptr, size uint) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
 	addr := address.VirtualAddr
-	if addr < p.virtualAddr || addr > p.virtualAddr+uintptr(p.size) {
+	if addr < p.virtualAddr || addr > p.virtualAddr+uintptr(size) {
 		return fmt.Errorf("invalid virtualAddr")
 	}
 
@@ -99,7 +107,7 @@ func (p *Pool) Free(address *Ptr, size uint) error {
 
 // Close frees the pool
 func (p *Pool) Close() error {
-	return goumem_syscall.Free(p.virtualAddr, uintptr(p.size))
+	return mem.Free(p.virtualAddr, uintptr(p.size))
 }
 
 type Ptr struct {

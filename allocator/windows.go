@@ -1,14 +1,20 @@
 //go:build windows
 
 // Package goumem_syscall
-package goumem_syscall
+package allocator
 
 import (
 	"fmt"
 	"golang.org/x/sys/windows"
 )
 
-func Mmap(size uintptr) (uintptr, error) {
+func New() MemoryAllocator {
+	return Windows{}
+}
+
+type Windows struct{}
+
+func (w Windows) Alloc(size uintptr) (uintptr, error) {
 	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
 	virtualAlloc := kernel32.NewProc("VirtualAlloc")
 
@@ -19,13 +25,13 @@ func Mmap(size uintptr) (uintptr, error) {
 		uintptr(0x04),   // PAGE_READWRITE
 	)
 	if r1 == 0 {
-		return 0, fmt.Errorf("failed to make VirtualAlloc syscall: %w", err)
+		return 0, fmt.Errorf("failed to make VirtualAlloc allocator: %w", err)
 	}
 
 	return r1, nil
 }
 
-func Free(addr, size uintptr) error {
+func (w Windows) Free(addr, size uintptr) error {
 	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
 	virtualFree := kernel32.NewProc("VirtualFree")
 
@@ -35,7 +41,7 @@ func Free(addr, size uintptr) error {
 		uintptr(0x8000), // MEM_RELEASE
 	)
 	if r1 == 0 {
-		return fmt.Errorf("failed to make VirtualFree syscall: %w", err)
+		return fmt.Errorf("failed to make VirtualFree allocator: %w", err)
 	}
 
 	return nil

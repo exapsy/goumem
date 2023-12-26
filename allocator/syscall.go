@@ -1,4 +1,4 @@
-package goumem_syscall
+package allocator
 
 import (
 	"syscall"
@@ -19,6 +19,6 @@ const (
 )
 
 type MemoryAllocator interface {
-	Mmap(size uintptr) (uintptr, error)
+	Alloc(size uintptr) (uintptr, error)
 	Free(addr, size uintptr) error
 }
