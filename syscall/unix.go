@@ -8,7 +8,7 @@ import (
 	"syscall"
 )
 
-func Mmap(size uintptr) (uintptr, error) {
+func Alloc(size uintptr) (uintptr, error) {
 	syscallArgs := []uintptr{
 		0,
 		size,
