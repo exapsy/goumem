@@ -3,6 +3,7 @@ package pool
 import (
 	"fmt"
 	goumem_syscall "github.com/exapsy/goumem/syscall"
+	"sync"
 	"unsafe"
 )
 
@@ -11,6 +12,7 @@ type Pool struct {
 	virtualAddr uintptr
 	current     uintptr
 	freed       []uintptr
+	mutex       sync.Mutex
 }
 
 type Options struct {
@@ -39,6 +41,9 @@ func (p Pool) PoolAddr() uintptr {
 // Alloc allocates memory inside the pool.
 // Basically not really allocating memory, just returning the current address and incrementing it.
 func (p *Pool) Alloc(size uint) (*Ptr, error) {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
 	// Calculate the alignment for the requested size
 	alignment := uintptr(size)
 	if alignment < unsafe.Alignof(uintptr(0)) {
@@ -79,6 +84,9 @@ func (p *Pool) Alloc(size uint) (*Ptr, error) {
 // Free frees memory inside the pool.
 // Basically not really freeing memory, just decrementing the current address.
 func (p *Pool) Free(address *Ptr, size uint) error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
 	addr := address.VirtualAddr
 	if addr < p.virtualAddr || addr > p.virtualAddr+uintptr(p.size) {
 		return fmt.Errorf("invalid virtualAddr")
@@ -97,25 +105,38 @@ func (p *Pool) Close() error {
 type Ptr struct {
 	VirtualAddr uintptr
 	PoolAddr    uintptr
+	mutex       sync.RWMutex
 }
 
 // Int returns the value of the pointer as an int
-func (ptr Ptr) Int() int {
+func (ptr *Ptr) Int() int {
+	ptr.mutex.RLock()
+	defer ptr.mutex.RUnlock()
+
 	return *(*int)(unsafe.Pointer(ptr.VirtualAddr))
 }
 
 // Ptr returns the value of the pointer as an uintptr
-func (ptr Ptr) Uintptr() uintptr {
+func (ptr *Ptr) Uintptr() uintptr {
+	ptr.mutex.RLock()
+	defer ptr.mutex.RUnlock()
+
 	return *(*uintptr)(unsafe.Pointer(ptr.VirtualAddr))
 }
 
 // String returns the value of the pointer as a string
-func (ptr Ptr) String() string {
+func (ptr *Ptr) String() string {
+	ptr.mutex.RLock()
+	defer ptr.mutex.RUnlock()
+
 	return *(*string)(unsafe.Pointer(ptr.VirtualAddr))
 }
 
 // Set sets the value of the pointer
-func (ptr Ptr) Set(i interface{}) {
+func (ptr *Ptr) Set(i interface{}) {
+	ptr.mutex.Lock()
+	defer ptr.mutex.Unlock()
+
 	switch v := i.(type) {
 	case int:
 		*(*int)(unsafe.Pointer(ptr.VirtualAddr)) = v
