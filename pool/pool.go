@@ -19,8 +19,13 @@ type Pool struct {
 	size        uint
 	virtualAddr uintptr
 	current     uintptr
-	freed       []uintptr
+	freed       []FreedBlock
 	mutex       sync.Mutex
+}
+
+type FreedBlock struct {
+	Addr uintptr
+	Size uint
 }
 
 type Options struct {
@@ -38,7 +43,7 @@ func New(opts Options) (*Pool, error) {
 		size:        opts.Size,
 		virtualAddr: addr,
 		current:     addr,
-		freed:       make([]uintptr, 0),
+		freed:       make([]FreedBlock, 0),
 	}, nil
 }
 
@@ -66,15 +71,15 @@ func (p *Pool) Alloc(size uint) (*Ptr, error) {
 	}
 
 	if p.current+adjustment+uintptr(size) > p.virtualAddr+uintptr(p.size) {
-		return &Ptr{}, fmt.Errorf("pool is full")
+		return nil, ErrPoolFull
 	}
 
-	for i, addr := range p.freed {
-		if uintptr(size) <= addr {
+	for i, block := range p.freed {
+		if size <= block.Size {
 			// Remove this block from the freed list
 			p.freed = append(p.freed[:i], p.freed[i+1:]...)
 			return &Ptr{
-				VirtualAddr: addr,
+				VirtualAddr: block.Addr,
 				PoolAddr:    p.virtualAddr,
 			}, nil
 		}
@@ -100,13 +105,19 @@ func (p *Pool) Free(address *Ptr, size uint) error {
 		return fmt.Errorf("invalid virtualAddr")
 	}
 
-	p.freed = append(p.freed, addr)
+	p.freed = append(p.freed, FreedBlock{
+		Addr: addr,
+		Size: size,
+	})
 
 	return nil
 }
 
 // Close frees the pool
 func (p *Pool) Close() error {
+	p.mutex.Lock()
+	defer p.mutex.Unlock()
+
 	return mem.Free(p.virtualAddr, uintptr(p.size))
 }
 
