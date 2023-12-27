@@ -8,6 +8,18 @@ import (
 	"syscall"
 )
 
+const (
+	ProtectionRead  Protection = syscall.PROT_READ
+	ProtectionWrite Protection = syscall.PROT_WRITE
+)
+
+type Flag uintptr
+
+const (
+	FlagAnonymous Flag = syscall.MAP_ANONYMOUS
+	FlagPrivate   Flag = syscall.MAP_PRIVATE
+)
+
 func New() MemoryAllocator {
 	return Unix{}
 }

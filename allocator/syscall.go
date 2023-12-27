@@ -1,22 +1,6 @@
 package allocator
 
-import (
-	"syscall"
-)
-
 type Protection uintptr
-
-const (
-	ProtectionRead  Protection = syscall.PROT_READ
-	ProtectionWrite Protection = syscall.PROT_WRITE
-)
-
-type Flag uintptr
-
-const (
-	FlagAnonymous Flag = syscall.MAP_ANONYMOUS
-	FlagPrivate   Flag = syscall.MAP_PRIVATE
-)
 
 type MemoryAllocator interface {
 	Alloc(size uintptr) (uintptr, error)
