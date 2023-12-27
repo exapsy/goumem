@@ -79,8 +79,8 @@ func (p *Pool) Alloc(size uint) (*Ptr, error) {
 			// Remove this block from the freed list
 			p.freed = append(p.freed[:i], p.freed[i+1:]...)
 			return &Ptr{
-				VirtualAddr: block.Addr,
-				PoolAddr:    p.virtualAddr,
+				virtualAddr: block.Addr,
+				poolAddr:    p.virtualAddr,
 			}, nil
 		}
 	}
@@ -89,8 +89,8 @@ func (p *Pool) Alloc(size uint) (*Ptr, error) {
 	p.current += uintptr(size)
 
 	return &Ptr{
-		VirtualAddr: addr,
-		PoolAddr:    p.PoolAddr(),
+		virtualAddr: addr,
+		poolAddr:    p.PoolAddr(),
 	}, nil
 }
 
@@ -100,7 +100,7 @@ func (p *Pool) Free(address *Ptr, size uint) error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	addr := address.VirtualAddr
+	addr := address.virtualAddr
 	if addr < p.virtualAddr || addr > p.virtualAddr+uintptr(size) {
 		return fmt.Errorf("invalid virtualAddr")
 	}
@@ -122,9 +122,13 @@ func (p *Pool) Close() error {
 }
 
 type Ptr struct {
-	VirtualAddr uintptr
-	PoolAddr    uintptr
+	virtualAddr uintptr
+	poolAddr    uintptr
 	mutex       sync.RWMutex
+}
+
+func (ptr *Ptr) Address() uintptr {
+	return ptr.virtualAddr
 }
 
 // Int returns the value of the pointer as an int
@@ -132,7 +136,7 @@ func (ptr *Ptr) Int() int {
 	ptr.mutex.RLock()
 	defer ptr.mutex.RUnlock()
 
-	return *(*int)(unsafe.Pointer(ptr.VirtualAddr))
+	return *(*int)(unsafe.Pointer(ptr.virtualAddr))
 }
 
 // Ptr returns the value of the pointer as an uintptr
@@ -140,7 +144,7 @@ func (ptr *Ptr) Uintptr() uintptr {
 	ptr.mutex.RLock()
 	defer ptr.mutex.RUnlock()
 
-	return *(*uintptr)(unsafe.Pointer(ptr.VirtualAddr))
+	return *(*uintptr)(unsafe.Pointer(ptr.virtualAddr))
 }
 
 // String returns the value of the pointer as a string
@@ -148,7 +152,7 @@ func (ptr *Ptr) String() string {
 	ptr.mutex.RLock()
 	defer ptr.mutex.RUnlock()
 
-	return *(*string)(unsafe.Pointer(ptr.VirtualAddr))
+	return *(*string)(unsafe.Pointer(ptr.virtualAddr))
 }
 
 // Set sets the value of the pointer
@@ -158,10 +162,10 @@ func (ptr *Ptr) Set(i interface{}) {
 
 	switch v := i.(type) {
 	case int:
-		*(*int)(unsafe.Pointer(ptr.VirtualAddr)) = v
+		*(*int)(unsafe.Pointer(ptr.virtualAddr)) = v
 	case uintptr:
-		*(*uintptr)(unsafe.Pointer(ptr.VirtualAddr)) = v
+		*(*uintptr)(unsafe.Pointer(ptr.virtualAddr)) = v
 	case string:
-		*(*string)(unsafe.Pointer(ptr.VirtualAddr)) = v
+		*(*string)(unsafe.Pointer(ptr.virtualAddr)) = v
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"syscall"
 )
 
+type Protection uintptr
+
 const (
 	ProtectionRead  Protection = syscall.PROT_READ
 	ProtectionWrite Protection = syscall.PROT_WRITE
