@@ -5,7 +5,12 @@ Who said Go doesn't have manual memory allocation?
 **NO NEED TO CALL C** and context switch to manually allocate memory.
 
 Goumem is a library that provides manual memory allocation functions for Go,
-the way C does it, by using `mmap`.
+the way C does it, by using `mmap` for unix systems or the `KERNEL32 - VirtualAlloc` for windows systems.
+
+## Supports
+
+- Unix (Linux, macOS, ...)
+- Windows
 
 ## Installation
 
@@ -24,10 +29,10 @@ import (
 )
 
 func main() {
-	pool, err := goumempool.New(Options{
-		// Size of the pool in bytes
+    pool, err := goumempool.New(Options{ 
+        // Size of the pool in bytes 
         Size: 15,
-	})
+    })
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
