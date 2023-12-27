@@ -29,10 +29,10 @@ import (
 )
 
 func main() {
-    pool, err := goumempool.New(Options{ 
-        // Size of the pool in bytes 
-        Size: 15,
-    })
+	pool, err := goumempool.New(Options{
+		// Size of the pool in bytes 
+		Size: 15,
+	})
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -81,4 +81,5 @@ func main() {
 		panic(fmt.Errorf("Free() error = %v", err))
 	}
 }
+
 ```
