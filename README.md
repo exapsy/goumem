@@ -20,6 +20,8 @@ go get github.com/exapsy/goumem
 
 ## Example - Create a pool
 
+<img src="./docs/assets/pool.svg" alt="pool" width="350"/>
+
 ```go
 package main
 
