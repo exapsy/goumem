@@ -1,4 +1,4 @@
-package pool
+package goumem
 
 import (
 	"testing"
@@ -7,11 +7,11 @@ import (
 
 func TestPool(t *testing.T) {
 	t.Run("Allocating memory", func(t *testing.T) {
-		pool, err := New(Options{
+		pool, err := NewPool(PoolOptions{
 			Size: 15, // 15 bytes - account for alignment but not enough to store 3x32-bit integers
 		})
 		if err != nil {
-			t.Fatalf("New() error = %v", err)
+			t.Fatalf("NewPool() error = %v", err)
 		}
 
 		// Allocate 2 times 4 bytes (8 bytes total)
@@ -35,10 +35,10 @@ func TestPool(t *testing.T) {
 			t.Fatalf("Alloc() = %v, want 456", addr2.Int())
 		}
 
-		// Free the pool
+		// free the pool
 		err = pool.Close()
 		if err != nil {
-			t.Fatalf("Free() error = %v", err)
+			t.Fatalf("free() error = %v", err)
 		}
 	})
 
@@ -46,11 +46,11 @@ func TestPool(t *testing.T) {
 		var err error
 		var addr *Ptr
 
-		pool, err := New(Options{
+		pool, err := NewPool(PoolOptions{
 			Size: 15, // 15 bytes - account for alignment but not enough to store 3x32-bit integers
 		})
 		if err != nil {
-			t.Fatalf("New() error = %v", err)
+			t.Fatalf("NewPool() error = %v", err)
 		}
 
 		// Allocate 2 times 4 bytes (8 bytes total)
@@ -64,10 +64,10 @@ func TestPool(t *testing.T) {
 			t.Fatalf("Alloc() error = %v", err)
 		}
 
-		// Free the first 4 bytes
+		// free the first 4 bytes
 		err = pool.Free(addr, 4)
 		if err != nil {
-			t.Fatalf("Free() error = %v", err)
+			t.Fatalf("free() error = %v", err)
 		}
 
 		// Allocate 4 bytes again (should work since we freed 4 bytes)
@@ -81,19 +81,19 @@ func TestPool(t *testing.T) {
 			t.Errorf("Alloc() = %v, want 456", addr3.Int())
 		}
 
-		// Free the pool
+		// free the pool
 		err = pool.Close()
 		if err != nil {
-			t.Fatalf("Free() error = %v", err)
+			t.Fatalf("free() error = %v", err)
 		}
 	})
 
 	t.Run("Using the address memory directly", func(t *testing.T) {
-		pool, err := New(Options{
+		pool, err := NewPool(PoolOptions{
 			Size: 15, // 15 bytes - account for alignment but not enough to store 3x32-bit integers
 		})
 		if err != nil {
-			t.Fatalf("New() error = %v", err)
+			t.Fatalf("NewPool() error = %v", err)
 		}
 
 		// Allocate 4 bytes again (should work since we freed 4 bytes)
@@ -107,10 +107,10 @@ func TestPool(t *testing.T) {
 			t.Fatalf("Alloc() = %v, want 456", addr4.Int())
 		}
 
-		// Free the pool
+		// free the pool
 		err = pool.Close()
 		if err != nil {
-			t.Fatalf("Free() error = %v", err)
+			t.Fatalf("free() error = %v", err)
 		}
 	})
 }

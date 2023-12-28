@@ -27,16 +27,16 @@ package main
 
 import (
 	"fmt"
-	goumempool "github.com/exapsy/goumem/pool"
+	"github.com/exapsy/goumem"
 )
 
 func main() {
-	pool, err := goumempool.New(Options{
-		// Size of the pool in bytes 
+	pool, err := goumem.NewPool(goumem.PoolOptions{
+		// Size of the goumem in bytes 
 		Size: 15,
 	})
 	if err != nil {
-		t.Fatalf("New() error = %v", err)
+		panic(fmt.Errorf("New() error = %v", err))
 	}
 
 	// Allocate 2 times 4 bytes (8 bytes total)
@@ -77,11 +77,52 @@ func main() {
 		panic(fmt.Errorf("Alloc() = %v, want 456", addr3.Int()))
 	}
 
-	// Free the pool
+	// Free the goumem
 	err = pool.Close()
 	if err != nil {
 		panic(fmt.Errorf("Free() error = %v", err))
 	}
 }
+
+```
+
+## Example - Arena Pools
+
+```go
+package main
+
+import (
+	"fmt"
+	"github.com/exapsy/goumem"
+)
+
+func main() {
+	var err error
+
+	opts := goumem.ArenaPoolOptions{
+		NumArenas: 2,    // 2 arenas
+		ArenaSize: 1000, // 1000 bytes
+	}
+
+	ap, err := goumem.NewArenaPool(opts)
+
+	arena := ap.Get()
+	v, err := arena.Alloc(10)
+	if err != nil {
+		panic(fmt.Errorf("Alloc() error = %v", err))
+	}
+	v.Set(123)
+	fmt.Println(v.Int())
+	err = arena.Free(v, 10)
+	if err != nil {
+		panic(fmt.Errorf("Free() error = %v", err))
+	}
+
+	ap.ReturnArena(arena)
+
+	err = ap.Close()
+	if err != nil {
+		panic(fmt.Errorf("Close() error = %v", err))
+	}
 
 ```

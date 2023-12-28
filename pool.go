@@ -1,4 +1,4 @@
-package pool
+package goumem
 
 import (
 	"fmt"
@@ -28,11 +28,11 @@ type FreedBlock struct {
 	Size uint
 }
 
-type Options struct {
+type PoolOptions struct {
 	Size uint
 }
 
-func New(opts Options) (*Pool, error) {
+func NewPool(opts PoolOptions) (*Pool, error) {
 	allocSize := opts.Size
 	addr, err := mem.Alloc(uintptr(allocSize))
 	if err != nil {
@@ -105,6 +105,24 @@ func (p *Pool) Free(address *Ptr, size uint) error {
 		return fmt.Errorf("invalid virtualAddr")
 	}
 
+	// Search for a freed block that is adjacent to this one
+	// If any extend this block to include the freed block
+	// This prevents the freed list from growing too large -
+	// or in other words, the over-fragmentation of the freed list
+	for i, block := range p.freed {
+		if block.Addr+uintptr(block.Size) == addr {
+			// Extend this block to include the freed block
+			p.freed[i].Size += size
+			return nil
+		} else if addr+uintptr(size) == block.Addr {
+			// Extend the freed block to include this block
+			p.freed[i].Addr -= uintptr(size)
+			p.freed[i].Size += size
+			return nil
+		}
+	}
+
+	// No adjacent blocks so just append this one to the freed list
 	p.freed = append(p.freed, FreedBlock{
 		Addr: addr,
 		Size: size,
@@ -119,53 +137,4 @@ func (p *Pool) Close() error {
 	defer p.mutex.Unlock()
 
 	return mem.Free(p.virtualAddr, uintptr(p.size))
-}
-
-type Ptr struct {
-	virtualAddr uintptr
-	poolAddr    uintptr
-	mutex       sync.RWMutex
-}
-
-func (ptr *Ptr) Address() uintptr {
-	return ptr.virtualAddr
-}
-
-// Int returns the value of the pointer as an int
-func (ptr *Ptr) Int() int {
-	ptr.mutex.RLock()
-	defer ptr.mutex.RUnlock()
-
-	return *(*int)(unsafe.Pointer(ptr.virtualAddr))
-}
-
-// Ptr returns the value of the pointer as an uintptr
-func (ptr *Ptr) Uintptr() uintptr {
-	ptr.mutex.RLock()
-	defer ptr.mutex.RUnlock()
-
-	return *(*uintptr)(unsafe.Pointer(ptr.virtualAddr))
-}
-
-// String returns the value of the pointer as a string
-func (ptr *Ptr) String() string {
-	ptr.mutex.RLock()
-	defer ptr.mutex.RUnlock()
-
-	return *(*string)(unsafe.Pointer(ptr.virtualAddr))
-}
-
-// Set sets the value of the pointer
-func (ptr *Ptr) Set(i interface{}) {
-	ptr.mutex.Lock()
-	defer ptr.mutex.Unlock()
-
-	switch v := i.(type) {
-	case int:
-		*(*int)(unsafe.Pointer(ptr.virtualAddr)) = v
-	case uintptr:
-		*(*uintptr)(unsafe.Pointer(ptr.virtualAddr)) = v
-	case string:
-		*(*string)(unsafe.Pointer(ptr.virtualAddr)) = v
-	}
 }
