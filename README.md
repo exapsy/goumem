@@ -9,7 +9,7 @@ the way C does it, by using `mmap` for unix systems or the `KERNEL32 - VirtualAl
 
 ## Supports
 
-- Unix (Linux, macOS, ...)
+- Unix & POSIX compliant systems (Linux, macOS, ...)
 - Windows
 
 ## Installation
