@@ -2,17 +2,12 @@ package goumem
 
 import (
 	"fmt"
-	"github.com/exapsy/goumem/allocator"
 	"sync"
 	"unsafe"
 )
 
 var (
 	ErrPoolFull = fmt.Errorf("pool is full")
-)
-
-var (
-	mem = allocator.New()
 )
 
 type Pool struct {

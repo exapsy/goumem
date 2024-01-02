@@ -1,6 +1,7 @@
 package goumem
 
 import (
+	"fmt"
 	"sync"
 	"unsafe"
 )
@@ -9,6 +10,7 @@ type Ptr struct {
 	virtualAddr uintptr
 	poolAddr    uintptr
 	mutex       sync.RWMutex
+	size        uintptr
 }
 
 func (ptr *Ptr) Address() uintptr {
@@ -52,4 +54,15 @@ func (ptr *Ptr) Set(i interface{}) {
 	case string:
 		*(*string)(unsafe.Pointer(ptr.virtualAddr)) = v
 	}
+}
+
+func (ptr *Ptr) Free() error {
+	if ptr.size == 0 {
+		return fmt.Errorf("cannot free a pointer without a size, it's probably allocated from a pool or an arena")
+	}
+
+	ptr.mutex.Lock()
+	defer ptr.mutex.Unlock()
+
+	return mem.Free(ptr.poolAddr, ptr.size)
 }
