@@ -41,6 +41,14 @@ func (ptr *Ptr) String() string {
 	return *(*string)(unsafe.Pointer(ptr.virtualAddr))
 }
 
+// Byte returns the value of the pointer as a byte
+func (ptr *Ptr) Byte() byte {
+	ptr.mutex.RLock()
+	defer ptr.mutex.RUnlock()
+
+	return *(*byte)(unsafe.Pointer(ptr.virtualAddr))
+}
+
 // Set sets the value of the pointer
 func (ptr *Ptr) Set(i interface{}) {
 	ptr.mutex.Lock()
