@@ -30,6 +30,8 @@ This, is not inherently bad. Quite the opposite! A garbage collector saves you f
 - Batch de-allocation
 - Strategic colored de-allocations
 - Means MUCH less CPU calling for free-ing objects which is VERY time consuming
+- Very confusing bugs
+- Leaks!!!!
 
 But, what a garbage collector doesn't do, is allocating and deallocating at will.
 Sometimes, this is quite important, as you know that "hey, I won't be needing this batch of memory anymore and it takes MUCH memory,
