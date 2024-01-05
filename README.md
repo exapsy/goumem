@@ -52,6 +52,17 @@ That's why we implement Memory arenas, pools and batching. Because we don't wann
 
 That's it. Neither is good or bad. Both have their extremely good usecases, and even worse, manual memory allocation has many caveats and you have to know what you're doing and why. So, use with care, and always Free(obj)!
 
+### Why do you have single-object allocators
+
+Things like `NewInt(5)` exist for the sole purpose of if you wanted to use an allocator on a device that simply doesn't acquire much memory. Such as an arduino. Memory sometimes is very crucial, as CPU is too, and GC acquires much CPU on tracking these objects, and Memory also is acquired to keep these objects till the Garbage Collector is called over an interval of time.
+
+These will be kept for this sole purpose. But I can see that
+
+- People may misuse them because they think "manual memory allocation is better" just "because".
+- It's a small use-case.
+
+But I want Golang to be able to perform these tasks with a simple library when in need rather than having to implement your own, and be improved over the interval of time.
+
 
 ## Benchmark
 
