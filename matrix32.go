@@ -8,7 +8,7 @@ type PointerMatrixFloat32 struct {
 	cols        int
 }
 
-func NewMatrixFloat32(rows, cols int) (*PointerMatrixFloat32, error) {
+func NewMatrix32(rows, cols int) (*PointerMatrixFloat32, error) {
 	virtualAddr, err := mem.Alloc(uintptr(rows * cols * 8))
 	if err != nil {
 		return nil, err
