@@ -50,6 +50,35 @@ That's why we implement Memory arenas, pools and batching. Because we don't wann
 
 That's it. Neither is good or bad. Both have their extremely good usecases, and even worse, manual memory allocation has many caveats and you have to know what you're doing and why. So, use with care, and always Free(obj)!
 
+
+## Benchmark
+
+Admittedly, the benchmark was run on purpose while I was running Chrome behind with a youtube video because I know it takes quite a lot of CPU processing and RAM. It's the purpose of this benchmark to show the contrast between the custom memory allocation versus garbage collection for this specific benchmark that I used it for.
+
+It's a benchmark over pool of:
+
+```go
+const (
+    numMatrices = 100000
+    rows        = 100
+    cols        = 100
+)
+```
+
+**Results**
+
+```
+ go test -bench=. -benchmem -benchtime=60s
+goos: linux
+goarch: amd64
+pkg: github.com/exapsy/goumem
+cpu: 12th Gen Intel(R) Core(TM) i7-1255U
+BenchmarkMatrix64PoolCustomMemory-12               3        25552590662 ns/op        1335242 B/op      33334 allocs/op
+BenchmarkMatrix64PoolGCMemory-12                   1        61972287972 ns/op       9231215384 B/op 10100147 allocs/op
+PASS
+ok      github.com/exapsy/goumem        214.718s
+```
+
 ## Example - Create a pool
 
 <img src="./docs/assets/pool.svg" alt="pool" width="350"/>
