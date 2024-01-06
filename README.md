@@ -7,6 +7,16 @@ Who said Go doesn't have manual memory allocation?
 Goumem is a library that provides manual memory allocation functions for Go,
 the way C does it, by using `mmap` for unix systems or the `KERNEL32 - VirtualAlloc` for windows systems.
 
+## Is it ready
+
+No. But for now you may look for how you may implement your own custom implementation if you want.
+
+## TODO:
+
+- [x] Support for pools
+- [ ] Support for resizing pools
+- [ ] Allocator doesn't allocate each time directly from CPU, but uses page-based chunks - and allocates new chunk per need.
+
 ## Supports
 
 - Unix & POSIX compliant systems (Linux, macOS, ...)
