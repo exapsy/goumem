@@ -1,20 +1,20 @@
 //go:build windows
 
-// Package goumem_syscall
-package allocator
+package memsyscall
 
 import (
 	"fmt"
+
 	"golang.org/x/sys/windows"
 )
 
-func New() MemoryAllocator {
-	return Windows{}
+type windowsSyscall struct{}
+
+func New() *windowsSyscall {
+	return &windowsSyscall{}
 }
 
-type Windows struct{}
-
-func (w Windows) Alloc(size uintptr) (uintptr, error) {
+func (w *windowsSyscall) Alloc(size uintptr) (uintptr, error) {
 	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
 	virtualAlloc := kernel32.NewProc("VirtualAlloc")
 
@@ -31,7 +31,7 @@ func (w Windows) Alloc(size uintptr) (uintptr, error) {
 	return r1, nil
 }
 
-func (w Windows) Free(addr, size uintptr) error {
+func (w *windowsSyscall) Free(addr, size uintptr) error {
 	kernel32 := windows.NewLazySystemDLL("kernel32.dll")
 	virtualFree := kernel32.NewProc("VirtualFree")
 
@@ -45,4 +45,10 @@ func (w Windows) Free(addr, size uintptr) error {
 	}
 
 	return nil
+}
+
+func (w *windowsSyscall) PageSize() uintptr {
+	var info windows.SYSTEM_INFO
+	windows.GetSystemInfo(&info)
+	return uintptr(info.PageSize)
 }
