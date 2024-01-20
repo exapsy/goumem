@@ -1,5 +1,9 @@
 # Goumem - Manual Memory Allocation Library
 
+<p align="center">
+  <img src="./docs/assets/logo.png" alt="goumem" width="350"/>
+</p>
+
 Who said Go doesn't have manual memory allocation?
 
 **NO NEED TO CALL C** and context switch to manually allocate memory.
