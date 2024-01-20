@@ -2,17 +2,22 @@ package goumem
 
 import (
 	"fmt"
+	"github.com/exapsy/goumem/allocator"
 	"unsafe"
 )
 
+var (
+	ErrMatrixZeroSize = fmt.Errorf("goumem: matrix size cannot be zero")
+)
+
 type PointerMatrixFloat64 struct {
-	virtualAddr uintptr
-	rows        int
-	cols        int
+	allocatedBlock *allocator.AllocatedBlock
+	rows           int
+	cols           int
 }
 
 func NewMatrix64(rows, cols int) (*PointerMatrixFloat64, error) {
-	virtualAddr, err := mem.Alloc(uintptr(rows * cols * 8))
+	block, err := mem.Alloc(uintptr(rows * cols * 8))
 	if err != nil {
 		return nil, err
 	}
@@ -22,14 +27,14 @@ func NewMatrix64(rows, cols int) (*PointerMatrixFloat64, error) {
 	}
 
 	return &PointerMatrixFloat64{
-		virtualAddr: virtualAddr,
-		rows:        rows,
-		cols:        cols,
+		allocatedBlock: block,
+		rows:           rows,
+		cols:           cols,
 	}, nil
 }
 
 func (ptr *PointerMatrixFloat64) Address() uintptr {
-	return ptr.virtualAddr
+	return ptr.allocatedBlock.Addr()
 }
 
 func (ptr *PointerMatrixFloat64) Rows() int {
@@ -45,7 +50,7 @@ func (ptr *PointerMatrixFloat64) Value() [][]float64 {
 	for i := 0; i < ptr.rows; i++ {
 		matrix[i] = make([]float64, ptr.cols)
 		for j := 0; j < ptr.cols; j++ {
-			matrix[i][j] = *(*float64)(unsafe.Pointer(ptr.virtualAddr + uintptr(i*ptr.cols+j)*8))
+			matrix[i][j] = *(*float64)(unsafe.Pointer(ptr.allocatedBlock.Addr() + uintptr(i*ptr.cols+j)*8))
 		}
 	}
 
@@ -63,13 +68,13 @@ func (ptr *PointerMatrixFloat64) Set(matrix [][]float64) {
 
 	for i := 0; i < ptr.rows; i++ {
 		for j := 0; j < ptr.cols; j++ {
-			*(*float64)(unsafe.Pointer(ptr.virtualAddr + uintptr(i*ptr.cols+j)*8)) = matrix[i][j]
+			*(*float64)(unsafe.Pointer(ptr.allocatedBlock.Addr() + uintptr(i*ptr.cols+j)*8)) = matrix[i][j]
 		}
 	}
 }
 
 func (ptr *PointerMatrixFloat64) Free() error {
-	return mem.Free(ptr.virtualAddr, uintptr(ptr.rows*ptr.cols*8))
+	return mem.Free(ptr.allocatedBlock)
 }
 
 func (ptr *PointerMatrixFloat64) String() string {
@@ -77,7 +82,7 @@ func (ptr *PointerMatrixFloat64) String() string {
 
 	for i := 0; i < ptr.rows; i++ {
 		for j := 0; j < ptr.cols; j++ {
-			s += fmt.Sprintf("%f ", *(*float64)(unsafe.Pointer(ptr.virtualAddr + uintptr(i*ptr.cols+j)*8)))
+			s += fmt.Sprintf("%f ", *(*float64)(unsafe.Pointer(ptr.allocatedBlock.Addr() + uintptr(i*ptr.cols+j)*8)))
 		}
 		s += "\n"
 	}
@@ -127,24 +132,18 @@ func NewPoolMatrix64(totalMatrices int, rows, cols int) (*PoolMatrixFloat64, err
 	matrixSize := uintptr(rows * cols * 8)
 	totalSize := matrixSize * uintptr(totalMatrices)
 
-	// Add extra space for alignment
-	totalSize += 63 // 63 is 64-1, which is the maximum offset we might need to align the memory
-
-	addr, err := mem.Alloc(totalSize)
+	block, err := mem.Alloc(totalSize)
 	if err != nil {
 		return nil, err
 	}
-
-	// Calculate the aligned address
-	alignedAddr := (addr + 63) &^ uintptr(63)
 
 	matrices := make([]*PointerMatrixFloat64, totalMatrices)
 	freeList := stack{matrices: make([]*PointerMatrixFloat64, totalMatrices)}
 	for i := range matrices {
 		matrices[i] = &PointerMatrixFloat64{
-			virtualAddr: alignedAddr + uintptr(i)*matrixSize,
-			rows:        rows,
-			cols:        cols,
+			allocatedBlock: block,
+			rows:           rows,
+			cols:           cols,
 		}
 		freeList.push(matrices[i])
 	}
@@ -153,7 +152,7 @@ func NewPoolMatrix64(totalMatrices int, rows, cols int) (*PoolMatrixFloat64, err
 		totalMatrices: totalMatrices,
 		rows:          rows,
 		cols:          cols,
-		addr:          alignedAddr,
+		addr:          block.Addr(),
 		matrices:      matrices,
 		freeList:      freeList,
 	}, nil

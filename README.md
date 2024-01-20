@@ -17,6 +17,8 @@ No. But for now you may look for how you may implement your own custom implement
 
 ## TODO:
 
+- [x] Support for allocation strategies & policies
+- [x] Support for chunked memory allocation
 - [x] Support for pools
 - [ ] Support for resizing pools
 - [ ] Allocator doesn't allocate each time directly from CPU, but uses page-based chunks - and allocates new chunk per need.
@@ -95,15 +97,15 @@ const (
 **Results**
 
 ```
- go test -bench=. -benchmem -benchtime=60s
+go test -bench=. -benchmem -benchtime=60s
 goos: linux
 goarch: amd64
 pkg: github.com/exapsy/goumem
 cpu: 12th Gen Intel(R) Core(TM) i7-1255U
-BenchmarkMatrix64PoolCustomMemory-12               3        25552590662 ns/op        1335242 B/op      33334 allocs/op
-BenchmarkMatrix64PoolGCMemory-12                   1        61972287972 ns/op       9231215384 B/op 10100147 allocs/op
+BenchmarkCustomMemory-12               5        21952180377 ns/op         801200 B/op      20002 allocs/op
+BenchmarkGCMemory-12                   2        53319438405 ns/op       9230008432 B/op 10100087 allocs/op
 PASS
-ok      github.com/exapsy/goumem        214.718s
+ok      github.com/exapsy/goumem        331.054s
 ```
 
 ## Example - Create a pool
