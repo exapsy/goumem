@@ -22,7 +22,7 @@ type (
 		free(chunks *chunkList, block *AllocatedBlock) error
 	}
 	allocationPolicy interface {
-		SelectChunk(chunks *chunkList, size uintptr) (*chunk, int)
+		SelectChunk(chunks *chunkList, size uintptr) *chunk
 	}
 	chunkList struct {
 		chunks *chunk
@@ -203,15 +203,17 @@ func (c *chunk) allocAndAppendNewChunk() (chunck *chunk, err error) {
 }
 
 func (c *chunk) splitAndGetFirstPart(block *chunkBlock, size uintptr) (uintptr, error) {
-	c.freeBytes -= size
+	// handle blocks
 	firstBlock := block
 	firstBlock.isFree = false
 	secondBlock := &chunkBlock{
-		addr:   firstBlock.addr + size + 1,
-		size:   firstBlock.size - size,
-		isFree: true,
-		prev:   firstBlock,
-		next:   firstBlock.next,
+		addr:     firstBlock.addr + size + 1,
+		size:     firstBlock.size - size,
+		isFree:   true,
+		prev:     firstBlock,
+		next:     firstBlock.next,
+		nextFree: firstBlock.nextFree,
+		prevFree: firstBlock.prevFree,
 	}
 	firstBlock.next = secondBlock
 
@@ -221,6 +223,10 @@ func (c *chunk) splitAndGetFirstPart(block *chunkBlock, size uintptr) (uintptr, 
 	if firstBlock.nextFree != nil {
 		firstBlock.nextFree.nextFree = secondBlock.nextFree
 	}
+
+	// handle chunk
+	c.freeBytes -= size
+	c.blocks = append(c.blocks, secondBlock)
 
 	return firstBlock.addr, nil
 }

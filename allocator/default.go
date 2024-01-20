@@ -13,14 +13,14 @@ func newDefaultAllocPolicy() allocationPolicy {
 }
 
 // SelectChunk selects a chunk from the list of chunks with more or equal free bytes than the size.
-func (p *defaultAllocPolicy) SelectChunk(chunkList *chunkList, size uintptr) (*chunk, int) {
+func (p *defaultAllocPolicy) SelectChunk(chunkList *chunkList, size uintptr) *chunk {
 	if allocThresholdWithoutAllocatingAnotherChunk >= size {
 		// threshold not reached
 		for i := 0; i < chunkList.len; i++ {
 			// select first chunk with enough free bytes
 			chunk := chunkList.chunks
 			if chunk != nil && chunk.freeBytes >= size {
-				return chunk, i
+				return chunk
 			}
 		}
 	}
@@ -32,14 +32,14 @@ func (p *defaultAllocPolicy) SelectChunk(chunkList *chunkList, size uintptr) (*c
 	c, err := newChunk(size, lastChunk, nil)
 	if err != nil {
 		fmt.Println("error allocating new chunk: ", err)
-		return nil, -1
+		return nil
 	}
 
 	lastChunk.next = c
 	c.prev = lastChunk
 	chunkList.len++
 
-	return c, chunkList.len - 1
+	return c
 }
 
 type defaultAllocStrategy struct {
@@ -53,7 +53,7 @@ func newDefaultAllocStrategy(allocPolicy allocationPolicy) allocationStrategy {
 }
 
 func (s *defaultAllocStrategy) alloc(chunks *chunkList, size uintptr) (*AllocatedBlock, error) {
-	c, ci := s.allocationPolicy.SelectChunk(chunks, size)
+	c := s.allocationPolicy.SelectChunk(chunks, size)
 	if c == nil {
 		return nil, fmt.Errorf("no chunk found")
 	}
@@ -80,7 +80,7 @@ func (s *defaultAllocStrategy) alloc(chunks *chunkList, size uintptr) (*Allocate
 
 	return nil, fmt.Errorf(
 		`no free block found. This should not happen
-as the policy should have selected a chunk with free bytes. chunk: %v, index: %v`, c, ci,
+as the policy should have selected a chunk with free bytes. chunk: %+v`, c,
 	)
 }
 
