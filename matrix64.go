@@ -158,7 +158,7 @@ func NewPoolMatrix64(totalMatrices int, rows, cols int) (*PoolMatrixFloat64, err
 	}, nil
 }
 
-func (pool *PoolMatrixFloat64) GetMatrix() *PointerMatrixFloat64 {
+func (pool *PoolMatrixFloat64) Get() *PointerMatrixFloat64 {
 	return pool.freeList.pop()
 }
 

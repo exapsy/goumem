@@ -24,18 +24,18 @@ const (
 
 func BenchmarkCustomMemory(b *testing.B) {
 	b.ResetTimer()
-	pool, err := NewPoolMatrix64(numMatrices, rows, cols)
+	poolMatrix64, err := NewPoolMatrix64(numMatrices, rows, cols)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	var r float64
 	for i := 0; i < b.N; i++ {
+		randVal := rand.Float64()
 		for j := 0; j < numMatrices; j++ {
-			matrix := pool.GetMatrix()
-			r += simulateReadWrite(matrix)
-			pool.Free(matrix)
-			runtime.KeepAlive(matrix)
+			matrix := poolMatrix64.Get()
+			r += simulateReadWrite(matrix, randVal)
+			poolMatrix64.Free(matrix)
 		}
 		runtime.GC()
 	}
@@ -49,9 +49,10 @@ func BenchmarkGCMemory(b *testing.B) {
 	b.ResetTimer()
 	matrices := make([][]float64, numMatrices)
 	for i := 0; i < b.N; i++ {
+		randVal := rand.Float64()
 		for j := 0; j < numMatrices; j++ {
 			matrix := makeSampleMatrix(rows, cols)
-			r += simulateReadWriteGC(matrix)
+			r += simulateReadWriteGC(matrix, randVal)
 			matrices = matrix
 		}
 		runtime.GC()
@@ -62,7 +63,7 @@ func BenchmarkGCMemory(b *testing.B) {
 	_ = fmt.Sprint(result) // Print the result or use it in a way that ensures it's not optimized out
 }
 
-func simulateReadWrite(matrix *PointerMatrixFloat64) float64 {
+func simulateReadWrite(matrix *PointerMatrixFloat64, randVal float64) float64 {
 	var sum float64
 	var val float64
 	rows := matrix.Rows()
@@ -70,7 +71,7 @@ func simulateReadWrite(matrix *PointerMatrixFloat64) float64 {
 	for i := 0; i < rows; i++ {
 		for j := 0; j < cols; j++ {
 			val = *(*float64)(unsafe.Pointer(matrix.Address() + uintptr(i*cols+j)*8))
-			val *= rand.Float64()
+			val *= randVal
 			*(*float64)(unsafe.Pointer(matrix.Address() + uintptr(i*cols+j)*8)) = val
 			sum += val
 		}
@@ -78,12 +79,12 @@ func simulateReadWrite(matrix *PointerMatrixFloat64) float64 {
 	return sum
 }
 
-func simulateReadWriteGC(matrix [][]float64) float64 {
+func simulateReadWriteGC(matrix [][]float64, randVal float64) float64 {
 	var sum float64
 	for r := range matrix {
 		for c := range matrix[r] {
 			val := matrix[r][c]
-			val *= rand.Float64()
+			val *= randVal
 			matrix[r][c] = val
 			sum += val
 		}
