@@ -37,6 +37,7 @@ func BenchmarkCustomMemory(b *testing.B) {
 			pool.Free(matrix)
 			runtime.KeepAlive(matrix)
 		}
+		runtime.GC()
 	}
 	b.StopTimer()          // Stop the timer before doing operations not related to the actual benchmark
 	result = r             // Assign the final result to the global variable
@@ -53,6 +54,7 @@ func BenchmarkGCMemory(b *testing.B) {
 			r += simulateReadWriteGC(matrix)
 			matrices = matrix
 		}
+		runtime.GC()
 	}
 	runtime.KeepAlive(matrices)
 	b.StopTimer()          // Stop the timer before doing operations not related to the actual benchmark
