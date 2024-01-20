@@ -9,7 +9,7 @@ import (
 var (
 	syscall                                     memsyscall.Syscall = memsyscall.New()
 	PageSize                                                       = syscall.PageSize()
-	AllocThresholdWithoutAllocatingAnotherChunk uintptr            = PageSize / 2
+	allocThresholdWithoutAllocatingAnotherChunk uintptr            = PageSize / 2
 )
 
 type (
@@ -17,12 +17,12 @@ type (
 		Alloc(size uintptr) (*AllocatedBlock, error)
 		Free(block *AllocatedBlock) error
 	}
-	AllocationStrategy interface {
-		Allocate(chunks *chunkList, size uintptr) (*AllocatedBlock, error)
-		Free(chunks *chunkList, block *AllocatedBlock) error
+	allocationStrategy interface {
+		alloc(chunks *chunkList, size uintptr) (*AllocatedBlock, error)
+		free(chunks *chunkList, block *AllocatedBlock) error
 	}
-	AllocationPolicy interface {
-		SelectChunk(chunks *chunkList, size uintptr) *chunk
+	allocationPolicy interface {
+		SelectChunk(chunks *chunkList, size uintptr) (*chunk, int)
 	}
 	chunkList struct {
 		chunks *chunk
@@ -39,95 +39,142 @@ type (
 		prev      *chunk
 	}
 	chunkBlock struct {
-		addr   uintptr
-		size   uintptr
-		isFree bool
-		next   *chunkBlock
-		prev   *chunkBlock
+		addr     uintptr
+		size     uintptr
+		isFree   bool
+		next     *chunkBlock
+		prev     *chunkBlock
+		nextFree *chunkBlock
+		prevFree *chunkBlock
 	}
 	AllocatedBlock struct {
-		size       uintptr
-		addr       uintptr
-		chunkIndex int
-		blockIndex int
+		size          uintptr
+		addr          uintptr
+		chunk         *chunk
+		chunkBlockMem *chunkBlock
 	}
 )
 
 func newChunkList() *chunkList {
-	list := chunkList{
-		len: 1,
+	list := &chunkList{
+		chunks: nil,
+		len:    1,
 	}
 
-	newChunk, err := newChunk(nil, nil)
+	newChunk, err := newChunk(PageSize, nil, nil)
 	if err != nil {
 		panic(err)
 	}
 
 	list.chunks = newChunk
 
-	return nil
+	return list
 }
 
 func (cl *chunkList) alloc(size uintptr) (block *AllocatedBlock, chunkIndex int, blockIndex int, err error) {
-	cl.chunks.alloc(size)
+	head := cl.chunks
+	for head != nil {
+		var addr uintptr
+		addr, blockIndex, err = head.getFreeAddrForSize(size)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+
+		return &AllocatedBlock{
+			addr:          addr,
+			size:          size,
+			chunk:         head,
+			chunkBlockMem: head.blocks[blockIndex],
+		}, chunkIndex, blockIndex, nil
+	}
 	return nil, 0, 0, nil
 }
 
-func newChunk(previous, next *chunk) (*chunk, error) {
+func (cl *chunkList) freeBytes() uintptr {
+	var freeBytes uintptr
+	head := cl.chunks
+	for head != nil {
+		freeBytes += head.freeBytes
+		head = head.next
+	}
+
+	return freeBytes
+}
+
+func (cl *chunkList) freeChunk(chunkMem *chunk) error {
+	// remove chunk from list
+	if chunkMem.prev != nil { // not the first chunk
+		chunkMem.prev.next = chunkMem.next
+	}
+
+	if chunkMem.next != nil { // not the last chunk
+		chunkMem.next.prev = chunkMem.prev
+	}
+
+	// free memory
+	err := syscall.Free(chunkMem.addr, chunkMem.size)
+	if err != nil {
+		return fmt.Errorf("could not free memory: %w", err)
+	}
+
+	cl.len--
+
+	return nil
+}
+
+func newChunk(size uintptr, previous, next *chunk) (*chunk, error) {
 	var addr uintptr
 	var err error
 
-	// Allocate space from kernel
-	addr, err = syscall.Alloc(PageSize)
+	memoryAlignedSize := size
+	if size%PageSize != 0 {
+		memoryAlignedSize = size + (PageSize - size%PageSize) // align to next page
+	}
+
+	// alloc space from kernel
+	addr, err = syscall.Alloc(memoryAlignedSize)
 	if err != nil {
-		return nil, fmt.Errorf("could not allocate memory: %w", err)
+		return nil, fmt.Errorf("could not alloc memory: %w", err)
 	}
 
 	return &chunk{
 		addr:      addr,
-		size:      PageSize,
-		freeBytes: PageSize,
+		size:      memoryAlignedSize,
+		freeBytes: memoryAlignedSize,
 		prev:      previous,
 		next:      next,
 		blocks: []*chunkBlock{
 			{
-				addr:   addr,
-				size:   PageSize,
-				isFree: true,
-				next:   nil,
-				prev:   nil,
+				addr:     addr,
+				size:     memoryAlignedSize,
+				isFree:   true,
+				next:     nil,
+				prev:     nil,
+				nextFree: nil,
+				prevFree: nil,
 			},
 		},
 	}, nil
 }
 
-func (c *chunk) alloc(size uintptr) (addr uintptr, err error) {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	// check if there is enough space in the chunk
-	if c.freeBytes < size {
-		return 0, fmt.Errorf("not enough space in chunk")
+func (c *chunk) get(index int) *chunk {
+	head := c
+	for i := 0; i < index; i++ {
+		head = head.next
 	}
 
-	// get the first free address for the requested size
-	addr, _, err = c.getFreeAddrForSize(size)
-	if err != nil {
-		return 0, fmt.Errorf("could not get free address for size: %w", err)
-	}
-
-	return addr, nil
+	return head
 }
 
-// allocNewChunk allocates a new chunk at the end of the tail of chunks
+// allocAndAppendNewChunk allocates a new chunk at the end of the tail of chunks
 // of size being the page-size of the system.
-func (c *chunk) allocNewChunk() (chunck *chunk, err error) {
+func (c *chunk) allocAndAppendNewChunk() (chunck *chunk, err error) {
 	var addr uintptr
 
-	// Allocate space from kernel
+	// alloc space from kernel
 	addr, err = syscall.Alloc(PageSize)
 	if err != nil {
-		return nil, fmt.Errorf("could not allocate memory: %w", err)
+		return nil, fmt.Errorf("could not alloc memory: %w", err)
 	}
 
 	// Get the tail
@@ -155,7 +202,7 @@ func (c *chunk) allocNewChunk() (chunck *chunk, err error) {
 	return head.next, nil
 }
 
-func (c *chunk) splitAndGetFirst(block *chunkBlock, size uintptr) (uintptr, error) {
+func (c *chunk) splitAndGetFirstPart(block *chunkBlock, size uintptr) (uintptr, error) {
 	c.freeBytes -= size
 	firstBlock := block
 	firstBlock.isFree = false
@@ -167,11 +214,20 @@ func (c *chunk) splitAndGetFirst(block *chunkBlock, size uintptr) (uintptr, erro
 		next:   firstBlock.next,
 	}
 	firstBlock.next = secondBlock
+
+	if firstBlock.prevFree != nil {
+		firstBlock.prevFree.nextFree = secondBlock
+	}
+	if firstBlock.nextFree != nil {
+		firstBlock.nextFree.nextFree = secondBlock.nextFree
+	}
+
 	return firstBlock.addr, nil
 }
 
 // mergeAdjacent merges every adjacent block nearby.
 // Reduces fragmentation of memory, even when seemed not necessary.
+// Used by [free] method.
 func (c *chunkBlock) mergeAdjacent() {
 	// check for backwards adjacent free blocks
 	head := c
@@ -186,40 +242,48 @@ func (c *chunkBlock) mergeAdjacent() {
 		c.size += head.size
 		c.next = head.next
 	}
+
+	if c.prevFree != nil {
+		prevNextFree := c.prevFree.nextFree
+		c.prevFree.nextFree = c
+
+		c.prevFree = prevNextFree
+	}
+
+	if c.nextFree != nil {
+		c.nextFree.prevFree = c
+		nextPrevFree := c.nextFree.prevFree
+		c.nextFree = nextPrevFree
+	}
 }
 
 func (c *chunk) getFreeAddrForSize(requestedSize uintptr) (addr uintptr, blockIndex int, err error) {
-	// check free blocks and adjust them if needed and have adjacent ones
-	// Adjust as in example: (x = occupied block(s), - is free block(s) )
-	// [xx | -  | - | x | - | xxxx | - ] ->
-	// [xx | -- | x | - | xxxx | - ] merged adjacent free block
-	//
 	// O(n) max cycles
 	// 2 branches - 1 with 2 other branches
 	for i, block := range c.blocks {
 		// split block if it's free and has enough space and occupy the first part of it
 		if block.isFree && block.size > requestedSize {
-			addr, err := c.splitAndGetFirst(block, requestedSize)
+			addr, err := c.splitAndGetFirstPart(block, requestedSize)
 			if err != nil {
 				return 0, 0, err
 			}
 
 			return addr, i, nil
 		} else if block.isFree {
-			// check if block is free &
-			// merge all adjacent blocks
-			block.mergeAdjacent()
+			// free blocks should be already merged by free method
+			// so, we do not need to check for adjacent free blocks
+			// it should already be at its maximum size
 
 			if block.size > requestedSize {
 				// check again if it's the requested size and split if
-				addr, err := c.splitAndGetFirst(block, requestedSize)
+				addr, err := c.splitAndGetFirstPart(block, requestedSize)
 				if err != nil {
 					return 0, 0, err
 				}
 
 				return addr, i, nil
 			} else if block.size == requestedSize {
-				// allocate whole block
+				// alloc whole block
 				addr := block.addr
 				c.freeBytes -= requestedSize
 				block.isFree = false
@@ -236,18 +300,18 @@ func (c *chunk) getFreeAddrForSize(requestedSize uintptr) (addr uintptr, blockIn
 	//      to the respective AllocatedBlock.
 
 	// create new chunk
-	//newChunk, err := c.allocNewChunk()
+	//newChunk, err := c.allocAndAppendNewChunk()
 	//if err != nil {
-	//	return 0, 0, fmt.Errorf("could not allocate new chunk")
+	//	return 0, 0, fmt.Errorf("could not alloc new chunk")
 	//}
 
 	// get the first chunk which has the requested requestedSize
-	//first, err := newChunk.splitAndGetFirst(newChunk.blocks[0], requestedSize)
+	//first, err := newChunk.splitAndGetFirstPart(newChunk.blocks[0], requestedSize)
 	//if err != nil {
 	//	return 0, 0, err
 	//}
 
-	return 0, 0, fmt.Errorf("could not allocate memory in chunk")
+	return 0, 0, fmt.Errorf("could not alloc memory in chunk")
 }
 
 func (c *chunkBlock) append(block *chunkBlock) error {
@@ -263,6 +327,15 @@ func (c *chunkBlock) append(block *chunkBlock) error {
 	head.next = block
 
 	return nil
+}
+
+func (c *chunkBlock) get(index int) *chunkBlock {
+	head := c
+	for i := 0; i < index; i++ {
+		head = head.next
+	}
+
+	return head
 }
 
 func (b *AllocatedBlock) Addr() uintptr {
