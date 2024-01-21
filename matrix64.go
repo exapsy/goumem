@@ -116,9 +116,8 @@ type stack struct {
 func (s *stack) push(matrix *PointerMatrixFloat64) {
 	if s.len >= len(s.matrices) {
 		s.matrices = append(s.matrices, matrix)
-	} else {
-		s.matrices[s.len] = matrix
 	}
+	s.matrices[s.len] = matrix
 	s.len++
 }
 
@@ -145,7 +144,7 @@ func NewPoolMatrix64(totalMatrices int, rows, cols int) (*PoolMatrixFloat64, err
 	}
 
 	matrices := make([]*PointerMatrixFloat64, totalMatrices)
-	freeList := stack{matrices: make([]*PointerMatrixFloat64, totalMatrices)}
+	freeList := stack{matrices: make([]*PointerMatrixFloat64, totalMatrices, totalMatrices)}
 	for i := range matrices {
 		matrices[i] = &PointerMatrixFloat64{
 			allocatedBlock: block,
