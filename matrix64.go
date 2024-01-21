@@ -16,8 +16,8 @@ type PointerMatrixFloat64 struct {
 	cols           int
 }
 
-func NewMatrix64(rows, cols int) (*PointerMatrixFloat64, error) {
-	block, err := mem.Alloc(uintptr(rows * cols * 8))
+func NewMatrixFloat64(rows, cols int) (*PointerMatrixFloat64, error) {
+	block, err := mem.Alloc(uintptr((rows * cols) << 3))
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +47,10 @@ func (ptr *PointerMatrixFloat64) Cols() int {
 
 func (ptr *PointerMatrixFloat64) Value() [][]float64 {
 	matrix := make([][]float64, ptr.rows)
-	for i := 0; i < ptr.rows; i++ {
-		matrix[i] = make([]float64, ptr.cols)
-		for j := 0; j < ptr.cols; j++ {
-			matrix[i][j] = *(*float64)(unsafe.Pointer(ptr.allocatedBlock.Addr() + uintptr(i*ptr.cols+j)*8))
-		}
+	flat := (*[1 << 30]float64)(unsafe.Pointer(ptr.allocatedBlock.Addr()))
+
+	for i := range matrix {
+		matrix[i] = flat[i*ptr.cols : (i+1)*ptr.cols]
 	}
 
 	return matrix
@@ -68,7 +67,7 @@ func (ptr *PointerMatrixFloat64) Set(matrix [][]float64) {
 
 	for i := 0; i < ptr.rows; i++ {
 		for j := 0; j < ptr.cols; j++ {
-			*(*float64)(unsafe.Pointer(ptr.allocatedBlock.Addr() + uintptr(i*ptr.cols+j)*8)) = matrix[i][j]
+			*(*float64)(unsafe.Pointer(ptr.allocatedBlock.Addr() + uintptr(i*ptr.cols+j)<<3)) = matrix[i][j]
 		}
 	}
 }
@@ -82,7 +81,7 @@ func (ptr *PointerMatrixFloat64) String() string {
 
 	for i := 0; i < ptr.rows; i++ {
 		for j := 0; j < ptr.cols; j++ {
-			s += fmt.Sprintf("%f ", *(*float64)(unsafe.Pointer(ptr.allocatedBlock.Addr() + uintptr(i*ptr.cols+j)*8)))
+			s += fmt.Sprintf("%f ", *(*float64)(unsafe.Pointer(ptr.allocatedBlock.Addr() + uintptr(i*ptr.cols+j)<<3)))
 		}
 		s += "\n"
 	}
@@ -129,7 +128,7 @@ func NewPoolMatrix64(totalMatrices int, rows, cols int) (*PoolMatrixFloat64, err
 	}
 
 	// Calculate the size of a matrix and the total size needed for all matrices
-	matrixSize := uintptr(rows * cols * 8)
+	matrixSize := uintptr(rows*cols) << 3
 	totalSize := matrixSize * uintptr(totalMatrices)
 
 	block, err := mem.Alloc(totalSize)
