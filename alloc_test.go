@@ -19,17 +19,19 @@ func (s *TestAllocSuite) TestAlloc() {
 		b float64
 		c string
 	}
-	myArr, err := Alloc(10, MyStruct{})
+	myArr, err := Alloc([10]MyStruct{})
 	if err != nil {
 		s.FailNow("Failed to allocate block")
 	}
 
-	myArr2, err := Alloc(20, MyStruct{})
+	s.Equal(uintptr(unsafe.Sizeof([10]MyStruct{})), myArr.Size())
+
+	myArr2, err := Alloc([20]MyStruct{})
 	if err != nil {
 		s.FailNow("Failed to allocate block")
 	}
 
-	s.Equal(uintptr(10*unsafe.Sizeof(MyStruct{})), myArr.Size())
+	s.Equal(uintptr(unsafe.Sizeof([20]MyStruct{})), myArr2.Size())
 
 	err = Free(myArr)
 	if err != nil {
@@ -40,6 +42,9 @@ func (s *TestAllocSuite) TestAlloc() {
 	if err != nil {
 		s.FailNow("Failed to free allocated block")
 	}
+
+	*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())) = [10]MyStruct{{1, 2.0, ""}}
+	s.Equal(1, (*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())))[0].a)
 }
 
 func TestAlloc(t *testing.T) {
