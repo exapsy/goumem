@@ -19,7 +19,7 @@ func (p *defaultAllocPolicy) SelectChunk(chunkList *chunkList, size uintptr) *ch
 		for i := 0; i < chunkList.len; i++ {
 			// select first chunk with enough free bytes
 			chunk := chunkList.chunks
-			if chunk != nil && chunk.freeBytes >= size {
+			if chunk != nil && chunk.freeBytes.Load() >= size {
 				return chunk
 			}
 		}
@@ -60,7 +60,7 @@ func (s *defaultAllocStrategy) alloc(chunks *chunkList, size uintptr) (*Allocate
 
 	for i := 0; i < len(c.blocks); i++ {
 		block := c.blocks[i]
-		if block.isFree.Load() && block.size >= size {
+		if block.isFree.Load() && block.size.Load() >= size {
 			addr, err := c.splitAndGetFirstPart(block, size)
 			if err != nil {
 				return nil, err
@@ -92,7 +92,7 @@ func (s *defaultAllocStrategy) free(chunks *chunkList, block *AllocatedBlock) er
 	// and merge everytime on allocation very fragmented memory.
 	block.chunkBlockMem.mergeAdjacent()
 
-	block.chunk.freeBytes += block.size
+	block.chunk.freeBytes.Add(block.size)
 
 	if block.chunk.freeBytes == block.chunk.size &&
 		chunks.freeBytes() > PageSize {

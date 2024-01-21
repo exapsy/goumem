@@ -29,17 +29,17 @@ type (
 		len    int
 	}
 	chunk struct {
-		size   uintptr
+		size   atomic.Uintptr
 		addr   uintptr
 		blocks []*chunkBlock
 		// freeBytes is meta-data for the total of free bytes left in the memory.
-		freeBytes uintptr
+		freeBytes atomic.Uintptr
 		next      *chunk
 		prev      *chunk
 	}
 	chunkBlock struct {
-		addr     uintptr
-		size     uintptr
+		addr     atomic.Uintptr
+		size     atomic.Uintptr
 		isFree   atomic.Bool
 		next     *chunkBlock
 		prev     *chunkBlock
@@ -93,7 +93,7 @@ func (cl *chunkList) freeBytes() uintptr {
 	var freeBytes uintptr
 	head := cl.chunks
 	for head != nil {
-		freeBytes += head.freeBytes
+		head.freeBytes.Add(freeBytes)
 		head = head.next
 	}
 
@@ -111,7 +111,7 @@ func (cl *chunkList) freeChunk(chunkMem *chunk) error {
 	}
 
 	// free memory
-	err := syscall.Free(chunkMem.addr, chunkMem.size)
+	err := syscall.Free(chunkMem.addr, chunkMem.size.Load())
 	if err != nil {
 		return fmt.Errorf("could not free memory: %w", err)
 	}
@@ -136,24 +136,27 @@ func newChunk(size uintptr, previous, next *chunk) (*chunk, error) {
 		return nil, fmt.Errorf("could not alloc memory: %w", err)
 	}
 
-	return &chunk{
-		addr:      addr,
-		size:      memoryAlignedSize,
-		freeBytes: memoryAlignedSize,
-		prev:      previous,
-		next:      next,
+	c := &chunk{
+		addr: addr,
+		prev: previous,
+		next: next,
 		blocks: []*chunkBlock{
 			{
-				addr:     addr,
-				size:     memoryAlignedSize,
-				isFree:   atomic.Bool{},
 				next:     nil,
 				prev:     nil,
 				nextFree: nil,
 				prevFree: nil,
 			},
 		},
-	}, nil
+	}
+
+	c.size.Store(memoryAlignedSize)
+	c.freeBytes.Store(memoryAlignedSize)
+	c.blocks[0].isFree.Store(true)
+	c.blocks[0].size.Store(memoryAlignedSize)
+	c.blocks[0].addr.Store(addr)
+
+	return c, nil
 }
 
 func (c *chunk) get(index int) *chunk {
@@ -184,18 +187,20 @@ func (c *chunk) allocAndAppendNewChunk() (chunck *chunk, err error) {
 
 	// Append new chunk on the tail
 	head.next = &chunk{
-		size:      PageSize,
-		freeBytes: PageSize,
-		addr:      addr,
+		addr: addr,
 		blocks: []*chunkBlock{
-			{
-				size: PageSize,
-				addr: addr,
-			},
+			{},
 		},
 		next: nil,
 		prev: head,
 	}
+
+	head.freeBytes.Add(PageSize)
+	head.size.Add(PageSize)
+	head.blocks[0].isFree.Store(true)
+	head.blocks[0].size.Store(PageSize)
+	head.blocks[0].addr.Store(addr)
+	head.blocks[0].isFree.Store(true)
 
 	return head.next, nil
 }
@@ -205,13 +210,13 @@ func (c *chunk) splitAndGetFirstPart(block *chunkBlock, size uintptr) (uintptr, 
 	firstBlock := block
 	firstBlock.isFree.Store(false)
 	secondBlock := &chunkBlock{
-		addr:     firstBlock.addr + size + 1,
-		size:     firstBlock.size - size,
 		prev:     firstBlock,
 		next:     firstBlock.next,
 		nextFree: firstBlock.nextFree,
 		prevFree: firstBlock.prevFree,
 	}
+	secondBlock.addr.Store(firstBlock.addr.Load() + size + 1)
+	secondBlock.size.Store(firstBlock.size.Load() - size)
 	secondBlock.isFree.Store(true)
 	firstBlock.next = secondBlock
 
@@ -223,10 +228,10 @@ func (c *chunk) splitAndGetFirstPart(block *chunkBlock, size uintptr) (uintptr, 
 	}
 
 	// handle chunk
-	atomic.AddUintptr(&c.freeBytes, -size)
+	c.freeBytes.Add(-size)
 	c.blocks = append(c.blocks, secondBlock)
 
-	return firstBlock.addr, nil
+	return firstBlock.addr.Load(), nil
 }
 
 // mergeAdjacent merges every adjacent block nearby.
@@ -235,15 +240,15 @@ func (c *chunk) splitAndGetFirstPart(block *chunkBlock, size uintptr) (uintptr, 
 func (c *chunkBlock) mergeAdjacent() {
 	// check for backwards adjacent free blocks
 	head := c
-	for head.isFree.Load() && head.addr+c.size+1 == c.addr {
-		head.size += c.size
+	for head.isFree.Load() && head.addr.Load()+c.size.Load()+1 == c.addr.Load() {
+		head.size.Add(c.size.Load())
 		head.prev = c.next
 	}
 
 	// check for forward adjacent free blocks
 	head = c
-	for head.isFree.Load() && c.addr+c.size == head.addr-1 {
-		c.size += head.size
+	for head.isFree.Load() && c.addr.Load()+c.size.Load() == head.addr.Load()-1 {
+		c.size.Add(head.size.Load())
 		c.next = head.next
 	}
 
@@ -266,7 +271,7 @@ func (c *chunk) getFreeAddrForSize(requestedSize uintptr) (addr uintptr, blockIn
 	// 2 branches - 1 with 2 other branches
 	for i, block := range c.blocks {
 		// split block if it's free and has enough space and occupy the first part of it
-		if block.isFree.Load() && block.size > requestedSize {
+		if block.isFree.Load() && block.size.Load() > requestedSize {
 			addr, err := c.splitAndGetFirstPart(block, requestedSize)
 			if err != nil {
 				return 0, 0, err
@@ -278,7 +283,7 @@ func (c *chunk) getFreeAddrForSize(requestedSize uintptr) (addr uintptr, blockIn
 			// so, we do not need to check for adjacent free blocks
 			// it should already be at its maximum size
 
-			if block.size > requestedSize {
+			if block.size.Load() > requestedSize {
 				// check again if it's the requested size and split if
 				addr, err := c.splitAndGetFirstPart(block, requestedSize)
 				if err != nil {
@@ -286,12 +291,12 @@ func (c *chunk) getFreeAddrForSize(requestedSize uintptr) (addr uintptr, blockIn
 				}
 
 				return addr, i, nil
-			} else if block.size == requestedSize {
+			} else if block.size.Load() == requestedSize {
 				// alloc whole block
 				addr := block.addr
-				atomic.AddUintptr(&c.freeBytes, -requestedSize)
+				c.freeBytes.Add(-requestedSize)
 				block.isFree.Store(false)
-				return addr, i, nil
+				return addr.Load(), i, nil
 			}
 		}
 	}
