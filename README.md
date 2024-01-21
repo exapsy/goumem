@@ -96,123 +96,19 @@ const (
 
 **Results**
 
-```
-go test -bench=. -benchmem -benchtime=60s
+```bash
+$ go test -bench=. -benchmem -benchtime=240s
 goos: linux
 goarch: amd64
 pkg: github.com/exapsy/goumem
 cpu: 12th Gen Intel(R) Core(TM) i7-1255U
-BenchmarkCustomMemory-12               5        21952180377 ns/op         801200 B/op      20002 allocs/op
-BenchmarkGCMemory-12                   2        53319438405 ns/op       9230008432 B/op 10100087 allocs/op
+BenchmarkCustomMemory-12              10        25098256116 ns/op         400600 B/op      10001 allocs/op
+BenchmarkGCMemory-12                   9        28630349082 ns/op       9229073352 B/op 10100069 allocs/op
 PASS
-ok      github.com/exapsy/goumem        331.054s
-```
-
-## Example - Create a pool
-
-<img src="./docs/assets/pool.svg" alt="pool" width="350"/>
-
-```go
-package main
-
-import (
-    "fmt"
-    "github.com/exapsy/goumem"
-)
-
-func main() {
-    pool, err := goumem.NewPool(goumem.PoolOptions{
-        // Size of the goumem in bytes 
-        Size: 15,
-    })
-    if err != nil {
-        panic(fmt.Errorf("New() error = %v", err))
-    }
-
-    // Allocate 2 times 4 bytes (8 bytes total)
-    addr, err := pool.Alloc(4)
-    if err != nil {
-        panic(fmt.Errorf("Alloc() error = %v", err))
-    }
-
-    addr.Set(456)
-    if addr.Int() != 456 {
-        panic(fmt.Errorf("Alloc() = %v, want 456", addr.Int()))
-    }
-
-    addr2, err := pool.Alloc(4)
-    if err != nil {
-        panic(fmt.Errorf("Alloc() error = %v", err))
-    }
-
-    addr2.Set(456)
-    if addr2.Int() != 456 {
-        panic(fmt.Errorf("Alloc() = %v, want 456", addr2.Int()))
-    }
-
-    // Free the first 4 bytes
-    err = pool.Free(addr, 4)
-    if err != nil {
-        panic(fmt.Errorf("Free() error = %v", err))
-    }
-
-    // Allocate 4 bytes again (should work since we freed 4 bytes)
-    addr3, err := pool.Alloc(4)
-    if err != nil {
-        panic(fmt.Errorf("Alloc() error = %v", err))
-    }
-
-    addr3.Set(456)
-    if addr3.Int() != 456 {
-        panic(fmt.Errorf("Alloc() = %v, want 456", addr3.Int()))
-    }
-
-    // Free the goumem
-    err = pool.Close()
-    if err != nil {
-        panic(fmt.Errorf("Free() error = %v", err))
-    }
-}
+ok      github.com/exapsy/goumem        561.607s
 
 ```
 
-## Example - Arena Pools
+## Examples
 
-```go
-package main
-
-import (
-    "fmt"
-    "github.com/exapsy/goumem"
-)
-
-func main() {
-    var err error
-
-    opts := goumem.ArenaPoolOptions{
-        NumArenas: 2,    // 2 arenas
-        ArenaSize: 1000, // 1000 bytes
-    }
-
-    ap, err := goumem.NewArenaPool(opts)
-
-    arena := ap.Get()
-    v, err := arena.Alloc(10)
-    if err != nil {
-        panic(fmt.Errorf("Alloc() error = %v", err))
-    }
-    v.Set(123)
-    fmt.Println(v.Int())
-    err = arena.Free(v, 10)
-    if err != nil {
-        panic(fmt.Errorf("Free() error = %v", err))
-    }
-
-    ap.ReturnArena(arena)
-
-    err = ap.Close()
-    if err != nil {
-        panic(fmt.Errorf("Close() error = %v", err))
-    }
-
-```
+Incoming, not a stable version yet.
