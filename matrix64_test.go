@@ -1,9 +1,7 @@
 package goumem
 
 import (
-	"fmt"
 	"math/rand"
-	"runtime"
 	"testing"
 	"unsafe"
 )
@@ -23,44 +21,74 @@ const (
 )
 
 func BenchmarkCustomMemory(b *testing.B) {
-	b.ResetTimer()
-	poolMatrix64, err := NewPoolMatrix64(numMatrices, rows, cols)
+	pool, err := NewPoolMatrix64(numMatrices, rows, cols)
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	var r float64
-	for i := 0; i < b.N; i++ {
-		randVal := rand.Float64()
-		for j := 0; j < numMatrices; j++ {
-			matrix := poolMatrix64.Get()
-			r += simulateReadWrite(matrix, randVal)
-			poolMatrix64.Free(matrix)
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		var r float64
+		for pb.Next() {
+			randVal := rand.Float64()
+			for i := 0; i < numMatrices; i++ {
+				matrix := pool.Get()
+				r += simulateReadWrite(matrix, randVal)
+				pool.Free(matrix)
+			}
 		}
-		runtime.GC()
-	}
-	b.StopTimer()          // Stop the timer before doing operations not related to the actual benchmark
-	result = r             // Assign the final result to the global variable
-	_ = fmt.Sprint(result) // Print the result or use it in a way that ensures it's not optimized out
+		result = r
+	})
+	//poolMatrix64, err := NewPoolMatrix64(numMatrices, rows, cols)
+	//if err != nil {
+	//	b.Fatal(err)
+	//}
+	//
+	//var r float64
+	//for i := 0; i < b.N; i++ {
+	//	randVal := rand.Float64()
+	//	for j := 0; j < numMatrices; j++ {
+	//		matrix := poolMatrix64.Get()
+	//		r += simulateReadWrite(matrix, randVal)
+	//		poolMatrix64.Free(matrix)
+	//	}
+	//	runtime.GC()
+	//}
+	//b.StopTimer()          // Stop the timer before doing operations not related to the actual benchmark
+	//result = r             // Assign the final result to the global variable
+	//_ = fmt.Sprint(result) // Print the result or use it in a way that ensures it's not optimized out
 }
 
 func BenchmarkGCMemory(b *testing.B) {
-	var r float64
 	b.ResetTimer()
-	matrices := make([][]float64, numMatrices)
-	for i := 0; i < b.N; i++ {
-		randVal := rand.Float64()
-		for j := 0; j < numMatrices; j++ {
+	b.RunParallel(func(pb *testing.PB) {
+		var r float64
+		for pb.Next() {
 			matrix := makeSampleMatrix(rows, cols)
-			r += simulateReadWriteGC(matrix, randVal)
-			matrices = matrix
+			randVal := rand.Float64()
+			for i := 0; i < numMatrices; i++ {
+				r += simulateReadWriteGC(matrix, randVal)
+			}
 		}
-		runtime.GC()
-	}
-	runtime.KeepAlive(matrices)
-	b.StopTimer()          // Stop the timer before doing operations not related to the actual benchmark
-	result = r             // Assign the final result to the global variable
-	_ = fmt.Sprint(result) // Print the result or use it in a way that ensures it's not optimized out
+		result = r
+	})
+	b.StopTimer()
+	//var r float64
+	//b.ResetTimer()
+	//matrices := make([][]float64, numMatrices)
+	//for i := 0; i < b.N; i++ {
+	//	randVal := rand.Float64()
+	//	for j := 0; j < numMatrices; j++ {
+	//		matrix := makeSampleMatrix(rows, cols)
+	//		r += simulateReadWriteGC(matrix, randVal)
+	//		matrices = matrix
+	//	}
+	//	runtime.GC()
+	//}
+	//runtime.KeepAlive(matrices)
+	//b.StopTimer()          // Stop the timer before doing operations not related to the actual benchmark
+	//result = r             // Assign the final result to the global variable
+	//_ = fmt.Sprint(result) // Print the result or use it in a way that ensures it's not optimized out
 }
 
 func simulateReadWrite(matrix *PointerMatrixFloat64, randVal float64) float64 {
