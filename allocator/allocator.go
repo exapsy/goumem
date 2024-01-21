@@ -3,7 +3,9 @@ package allocator
 import (
 	"fmt"
 	memsyscall "github.com/exapsy/goumem/mem_syscall"
+	"reflect"
 	"sync/atomic"
+	"unsafe"
 )
 
 var (
@@ -349,4 +351,123 @@ func (b *AllocatedBlock) Size() uintptr {
 
 func (b *AllocatedBlock) IsFreed() bool {
 	return b.flags&AllocatedBlockFlagsFree != 0
+}
+func setStruct(ptr unsafe.Pointer, val reflect.Value) {
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		switch field.Kind() {
+		case reflect.Int:
+			*(*int)(ptr) = int(field.Int())
+		case reflect.Float64:
+			*(*float64)(ptr) = field.Float()
+		case reflect.String:
+			*(*string)(ptr) = field.String()
+		case reflect.Struct:
+			setStruct(ptr, field)
+		default:
+			panic("unsupported type")
+		}
+	}
+}
+
+func getStruct(ptr unsafe.Pointer, val reflect.Value) {
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Field(i)
+		switch field.Kind() {
+		case reflect.Int:
+			field.SetInt(int64(*(*int)(ptr)))
+		case reflect.Float64:
+			field.SetFloat(float64(*(*float64)(ptr)))
+		case reflect.String:
+			field.SetString(string(*(*string)(ptr)))
+		case reflect.Struct:
+			getStruct(ptr, field)
+		case reflect.Array, reflect.Slice:
+			getArrayOrSlice(ptr, field)
+		default:
+			panic("unsupported type")
+		}
+	}
+}
+
+func setArrayOrSlice(ptr unsafe.Pointer, val reflect.Value) {
+	for i := 0; i < val.Len(); i++ {
+		elem := val.Index(i)
+		switch elem.Kind() {
+		case reflect.Int:
+			*(*int)(ptr) = int(elem.Int())
+		case reflect.Float64:
+			*(*float64)(ptr) = elem.Float()
+		case reflect.String:
+			*(*string)(ptr) = elem.String()
+		case reflect.Struct:
+			setStruct(ptr, elem)
+		case reflect.Array, reflect.Slice:
+			setArrayOrSlice(ptr, elem)
+		default:
+			panic("unsupported type")
+		}
+	}
+}
+
+func getArrayOrSlice(ptr unsafe.Pointer, val reflect.Value) {
+	for i := 0; i < val.Len(); i++ {
+		elem := val.Index(i)
+		switch elem.Kind() {
+		case reflect.Int:
+			elem.SetInt(int64(*(*int)(ptr)))
+		case reflect.Float64:
+			elem.SetFloat(float64(*(*float64)(ptr)))
+		case reflect.String:
+			elem.SetString(string(*(*string)(ptr)))
+		case reflect.Struct:
+			getStruct(ptr, elem)
+		default:
+			panic("unsupported type")
+		}
+	}
+}
+
+func (b *AllocatedBlock) Set(value interface{}) {
+	ptr := unsafe.Pointer(b.Addr())
+	switch v := value.(type) {
+	case int:
+		*(*int)(ptr) = v
+	case float64:
+		*(*float64)(ptr) = v
+	case string:
+		*(*string)(ptr) = v
+	default:
+		val := reflect.ValueOf(value)
+		switch val.Kind() {
+		case reflect.Struct:
+			setStruct(ptr, val)
+		case reflect.Array, reflect.Slice:
+			setArrayOrSlice(ptr, val)
+		default:
+			panic("unsupported type")
+		}
+	}
+}
+
+func (b *AllocatedBlock) Get(value interface{}) {
+	ptr := unsafe.Pointer(b.Addr())
+	switch v := value.(type) {
+	case *int:
+		*v = *(*int)(ptr)
+	case *float64:
+		*v = *(*float64)(ptr)
+	case *string:
+		*v = *(*string)(ptr)
+	default:
+		val := reflect.ValueOf(value)
+		switch val.Kind() {
+		case reflect.Struct:
+			getStruct(ptr, val)
+		case reflect.Array, reflect.Slice:
+			getArrayOrSlice(ptr, val)
+		default:
+			panic("unsupported type")
+		}
+	}
 }
