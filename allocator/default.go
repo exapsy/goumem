@@ -58,12 +58,9 @@ func (s *defaultAllocStrategy) alloc(chunks *chunkList, size uintptr) (*Allocate
 		return nil, fmt.Errorf("no chunk found")
 	}
 
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
 	for i := 0; i < len(c.blocks); i++ {
 		block := c.blocks[i]
-		if block.isFree && block.size >= size {
+		if block.isFree.Load() && block.size >= size {
 			addr, err := c.splitAndGetFirstPart(block, size)
 			if err != nil {
 				return nil, err
@@ -86,10 +83,7 @@ as the policy should have selected a chunk with free bytes. chunk: %+v`, c,
 
 func (s *defaultAllocStrategy) free(chunks *chunkList, block *AllocatedBlock) error {
 
-	block.chunk.mutex.Lock()
-	defer block.chunk.mutex.Unlock()
-
-	block.chunkBlockMem.isFree = true
+	block.chunkBlockMem.isFree.Store(true)
 
 	// merge adjacent blocks
 	// That is, if there are any adjacent blocks that are free.

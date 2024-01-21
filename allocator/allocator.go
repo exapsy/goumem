@@ -3,7 +3,7 @@ package allocator
 import (
 	"fmt"
 	memsyscall "github.com/exapsy/goumem/mem_syscall"
-	"sync"
+	"sync/atomic"
 )
 
 var (
@@ -34,14 +34,13 @@ type (
 		blocks []*chunkBlock
 		// freeBytes is meta-data for the total of free bytes left in the memory.
 		freeBytes uintptr
-		mutex     sync.Mutex
 		next      *chunk
 		prev      *chunk
 	}
 	chunkBlock struct {
 		addr     uintptr
 		size     uintptr
-		isFree   bool
+		isFree   atomic.Bool
 		next     *chunkBlock
 		prev     *chunkBlock
 		nextFree *chunkBlock
@@ -147,7 +146,7 @@ func newChunk(size uintptr, previous, next *chunk) (*chunk, error) {
 			{
 				addr:     addr,
 				size:     memoryAlignedSize,
-				isFree:   true,
+				isFree:   atomic.Bool{},
 				next:     nil,
 				prev:     nil,
 				nextFree: nil,
@@ -194,9 +193,8 @@ func (c *chunk) allocAndAppendNewChunk() (chunck *chunk, err error) {
 				addr: addr,
 			},
 		},
-		mutex: sync.Mutex{},
-		next:  nil,
-		prev:  head,
+		next: nil,
+		prev: head,
 	}
 
 	return head.next, nil
@@ -205,16 +203,16 @@ func (c *chunk) allocAndAppendNewChunk() (chunck *chunk, err error) {
 func (c *chunk) splitAndGetFirstPart(block *chunkBlock, size uintptr) (uintptr, error) {
 	// handle blocks
 	firstBlock := block
-	firstBlock.isFree = false
+	firstBlock.isFree.Store(false)
 	secondBlock := &chunkBlock{
 		addr:     firstBlock.addr + size + 1,
 		size:     firstBlock.size - size,
-		isFree:   true,
 		prev:     firstBlock,
 		next:     firstBlock.next,
 		nextFree: firstBlock.nextFree,
 		prevFree: firstBlock.prevFree,
 	}
+	secondBlock.isFree.Store(true)
 	firstBlock.next = secondBlock
 
 	if firstBlock.prevFree != nil {
@@ -225,7 +223,7 @@ func (c *chunk) splitAndGetFirstPart(block *chunkBlock, size uintptr) (uintptr, 
 	}
 
 	// handle chunk
-	c.freeBytes -= size
+	atomic.AddUintptr(&c.freeBytes, -size)
 	c.blocks = append(c.blocks, secondBlock)
 
 	return firstBlock.addr, nil
@@ -237,14 +235,14 @@ func (c *chunk) splitAndGetFirstPart(block *chunkBlock, size uintptr) (uintptr, 
 func (c *chunkBlock) mergeAdjacent() {
 	// check for backwards adjacent free blocks
 	head := c
-	for head.isFree && head.addr+c.size+1 == c.addr {
+	for head.isFree.Load() && head.addr+c.size+1 == c.addr {
 		head.size += c.size
 		head.prev = c.next
 	}
 
 	// check for forward adjacent free blocks
 	head = c
-	for head.isFree && c.addr+c.size == head.addr-1 {
+	for head.isFree.Load() && c.addr+c.size == head.addr-1 {
 		c.size += head.size
 		c.next = head.next
 	}
@@ -268,14 +266,14 @@ func (c *chunk) getFreeAddrForSize(requestedSize uintptr) (addr uintptr, blockIn
 	// 2 branches - 1 with 2 other branches
 	for i, block := range c.blocks {
 		// split block if it's free and has enough space and occupy the first part of it
-		if block.isFree && block.size > requestedSize {
+		if block.isFree.Load() && block.size > requestedSize {
 			addr, err := c.splitAndGetFirstPart(block, requestedSize)
 			if err != nil {
 				return 0, 0, err
 			}
 
 			return addr, i, nil
-		} else if block.isFree {
+		} else if block.isFree.Load() {
 			// free blocks should be already merged by free method
 			// so, we do not need to check for adjacent free blocks
 			// it should already be at its maximum size
@@ -291,57 +289,14 @@ func (c *chunk) getFreeAddrForSize(requestedSize uintptr) (addr uintptr, blockIn
 			} else if block.size == requestedSize {
 				// alloc whole block
 				addr := block.addr
-				c.freeBytes -= requestedSize
-				block.isFree = false
+				atomic.AddUintptr(&c.freeBytes, -requestedSize)
+				block.isFree.Store(false)
 				return addr, i, nil
 			}
 		}
 	}
 
-	// TODO: This solution below is very localized.
-	//      It does not allow for having the index of the chunk
-	// 		Thus why the chunkList was made,
-	//		and this kind of logic should be moved there,
-	// 		so, we can know in which chunk the allocation happened and transfer this metadata
-	//      to the respective AllocatedBlock.
-
-	// create new chunk
-	//newChunk, err := c.allocAndAppendNewChunk()
-	//if err != nil {
-	//	return 0, 0, fmt.Errorf("could not alloc new chunk")
-	//}
-
-	// get the first chunk which has the requested requestedSize
-	//first, err := newChunk.splitAndGetFirstPart(newChunk.blocks[0], requestedSize)
-	//if err != nil {
-	//	return 0, 0, err
-	//}
-
 	return 0, 0, fmt.Errorf("could not alloc memory in chunk")
-}
-
-func (c *chunkBlock) append(block *chunkBlock) error {
-	if c == nil {
-		return fmt.Errorf("chunkBlock is nil")
-	}
-
-	head := c
-	for head.next != nil {
-		head = head.next
-	}
-
-	head.next = block
-
-	return nil
-}
-
-func (c *chunkBlock) get(index int) *chunkBlock {
-	head := c
-	for i := 0; i < index; i++ {
-		head = head.next
-	}
-
-	return head
 }
 
 func (b *AllocatedBlock) Addr() uintptr {
