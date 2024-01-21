@@ -43,8 +43,8 @@ func (s *TestAllocSuite) TestAlloc() {
 		s.FailNow("Failed to free allocated block")
 	}
 
-	*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())) = [10]MyStruct{{1, 2.0, ""}}
-	s.Equal(1, (*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())))[0].a)
+	*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())) = [10]MyStruct{{8, 2.0, ""}}
+	s.Equal(8, (*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())))[0].a)
 }
 
 func TestAlloc(t *testing.T) {
