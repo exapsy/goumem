@@ -347,6 +347,6 @@ func (b *AllocatedBlock) Size() uintptr {
 //	}
 //}
 
-func (b *AllocatedBlock) IsFree() bool {
+func (b *AllocatedBlock) IsFreed() bool {
 	return b.flags&AllocatedBlockFlagsFree != 0
 }

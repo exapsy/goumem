@@ -44,7 +44,7 @@ func (s *TestAllocSuite) TestAlloc() {
 
 	err = Free(myArr)
 	s.EqualError(err, allocator.ErrAllocatedBlockAlreadyFreed.Error())
-	s.Equal(myArr.IsFree(), true)
+	s.Equal(myArr.IsFreed(), true)
 
 	err = Free(myArr2)
 	if err != nil {
