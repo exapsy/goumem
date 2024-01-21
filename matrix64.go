@@ -33,6 +33,14 @@ func NewMatrixFloat64(rows, cols int) (*PointerMatrixFloat64, error) {
 	}, nil
 }
 
+func (ptr *PointerMatrixFloat64) SetRowColValue(row, col int, value float64) {
+	*(*float64)(unsafe.Pointer(ptr.allocatedBlock.Addr() + uintptr(row*ptr.cols+col)<<3)) = value
+}
+
+func (ptr *PointerMatrixFloat64) GetRowColValue(row, col int) float64 {
+	return *(*float64)(unsafe.Pointer(ptr.allocatedBlock.Addr() + uintptr(row*ptr.cols+col)<<3))
+}
+
 func (ptr *PointerMatrixFloat64) Address() uintptr {
 	return ptr.allocatedBlock.Addr()
 }

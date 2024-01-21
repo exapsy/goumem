@@ -3,7 +3,6 @@ package goumem
 import (
 	"math/rand"
 	"testing"
-	"unsafe"
 )
 
 // Global variable to prevent compiler optimizations
@@ -99,9 +98,9 @@ func simulateReadWrite(matrix *PointerMatrixFloat64, randVal float64) float64 {
 	cols := matrix.Cols()
 	for i := 0; i < rows; i++ {
 		for j := 0; j < cols; j++ {
-			val = *(*float64)(unsafe.Pointer(matrix.Address() + uintptr(i*cols+j)*8))
+			val = matrix.GetRowColValue(i, j)
 			val *= randVal
-			*(*float64)(unsafe.Pointer(matrix.Address() + uintptr(i*cols+j)*8)) = val
+			matrix.SetRowColValue(i, j, val)
 			sum += val
 		}
 	}
