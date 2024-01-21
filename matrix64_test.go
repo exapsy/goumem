@@ -39,6 +39,7 @@ func BenchmarkCustomMemory(b *testing.B) {
 		}
 		result = r
 	})
+	b.StopTimer()
 	//poolMatrix64, err := NewPoolMatrix64(numMatrices, rows, cols)
 	//if err != nil {
 	//	b.Fatal(err)
