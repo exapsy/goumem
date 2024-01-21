@@ -4,13 +4,16 @@ import (
 	"fmt"
 	memsyscall "github.com/exapsy/goumem/mem_syscall"
 	"sync/atomic"
-	"unsafe"
 )
 
 var (
 	syscall                                     memsyscall.Syscall = memsyscall.New()
 	PageSize                                                       = syscall.PageSize()
 	allocThresholdWithoutAllocatingAnotherChunk uintptr            = PageSize / 2
+)
+
+var (
+	ErrAllocatedBlockAlreadyFreed = fmt.Errorf("goumem: allocated block already freed")
 )
 
 type (
@@ -52,7 +55,14 @@ type (
 		addr          uintptr
 		chunk         *chunk
 		chunkBlockMem *chunkBlock
+		flags         AllocatedBlockFlags
 	}
+	AllocatedBlockFlags uintptr
+)
+
+const (
+	AllocatedBlockFlagsNone AllocatedBlockFlags = 0
+	AllocatedBlockFlagsFree AllocatedBlockFlags = 1 << iota
 )
 
 func newChunkList() *chunkList {
@@ -337,6 +347,6 @@ func (b *AllocatedBlock) Size() uintptr {
 //	}
 //}
 
-func (b *AllocatedBlock) Get() interface{} {
-	return *(*interface{})(unsafe.Pointer(b.addr))
+func (b *AllocatedBlock) IsFree() bool {
+	return b.flags&AllocatedBlockFlagsFree != 0
 }

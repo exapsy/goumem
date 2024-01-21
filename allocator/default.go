@@ -135,5 +135,12 @@ func (a *defaultMemoryAllocator) Alloc(size uintptr) (*AllocatedBlock, error) {
 }
 
 func (a *defaultMemoryAllocator) Free(block *AllocatedBlock) error {
+	if block.flags&AllocatedBlockFlagsFree != 0 {
+		return ErrAllocatedBlockAlreadyFreed
+	}
+
+	block.flags |= AllocatedBlockFlagsFree
+	block.addr = 0
+
 	return a.strategy.free(a.chunks, block)
 }

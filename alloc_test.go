@@ -1,6 +1,7 @@
 package goumem
 
 import (
+	"github.com/exapsy/goumem/allocator"
 	"github.com/stretchr/testify/suite"
 	"testing"
 	"unsafe"
@@ -33,18 +34,22 @@ func (s *TestAllocSuite) TestAlloc() {
 
 	s.Equal(uintptr(unsafe.Sizeof([20]MyStruct{})), myArr2.Size())
 
+	*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())) = [10]MyStruct{{8, 2.0, ""}}
+	s.Equal(8, (*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())))[0].a)
+
 	err = Free(myArr)
 	if err != nil {
 		s.FailNow("Failed to free allocated block")
 	}
 
+	err = Free(myArr)
+	s.EqualError(err, allocator.ErrAllocatedBlockAlreadyFreed.Error())
+	s.Equal(myArr.IsFree(), true)
+
 	err = Free(myArr2)
 	if err != nil {
 		s.FailNow("Failed to free allocated block")
 	}
-
-	*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())) = [10]MyStruct{{8, 2.0, ""}}
-	s.Equal(8, (*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())))[0].a)
 }
 
 func TestAlloc(t *testing.T) {
