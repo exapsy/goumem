@@ -12,7 +12,6 @@ type AllocatorTestSuite struct {
 
 func (suite *AllocatorTestSuite) SetupTest() {
 	suite.allocator = Default()
-	// Add any setup code here...
 }
 
 func (suite *AllocatorTestSuite) TestSetGet() {
@@ -22,12 +21,21 @@ func (suite *AllocatorTestSuite) TestSetGet() {
 		suite.FailNow("Failed to allocate block", err)
 	}
 
+	suite.Equal(block.IsFreed(), false)
+
 	block.Set(data)
 
 	var got string
 	block.Get(&got)
 
 	suite.Equal(data, got)
+
+	err = suite.allocator.Free(block)
+	if err != nil {
+		suite.FailNow("Failed to free allocated block", err)
+	}
+
+	suite.Equal(block.IsFreed(), true)
 }
 
 func TestAllocatorTestSuite(t *testing.T) {
