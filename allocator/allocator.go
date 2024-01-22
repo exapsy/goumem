@@ -325,30 +325,6 @@ func (b *AllocatedBlock) Size() uintptr {
 	return b.size
 }
 
-//func (b *AllocatedBlock) Set(value interface{}) {
-//	var valuePtr unsafe.Pointer
-//	var valueSize uintptr
-//
-//	// Ensure the value is a pointer
-//	rv := reflect.ValueOf(value)
-//	if rv.Kind() != reflect.Ptr {
-//		panic("Set: value must be a pointer")
-//	}
-//
-//	valuePtr = unsafe.Pointer(rv.Pointer())
-//	valueSize = uintptr(rv.Elem().Type().Size())
-//
-//	sourceSlice := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
-//		Data: uintptr(valuePtr),
-//		Len:  int(valueSize),
-//		Cap:  int(valueSize),
-//	}))
-//
-//	for i := uintptr(0); i < valueSize; i++ {
-//		*(*byte)(unsafe.Pointer(b.addr + i)) = sourceSlice[i]
-//	}
-//}
-
 func (b *AllocatedBlock) IsFreed() bool {
 	return b.flags&AllocatedBlockFlagsFree != 0
 }
