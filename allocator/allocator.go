@@ -501,70 +501,6 @@ func setPtr(ptr unsafe.Pointer, val reflect.Value) {
 	}
 }
 
-// Set stores the value inside the allocated block.
-//
-// Is a user-friendly way to set a value inside an allocated block.
-// Arguably, it's not the fastest way to set a value inside an allocated block.
-// It's just a convenience method.
-// It uses a lot of reflection, which are inherently slow.
-//
-// Otherwise, you can use the more hacky and unsafe way of going with
-// unsafe casting (e.g. *int32(unsafe.Pointer(b.Addr())) = 8),
-// which avoids all the reflections and switch cases.
-func (b *AllocatedBlock) Set(value interface{}) {
-	ptr := unsafe.Pointer(b.Addr())
-	val := reflect.ValueOf(value)
-	switch v := value.(type) {
-	case int:
-		*(*int)(ptr) = v
-	case int8:
-		*(*int8)(ptr) = v
-	case int16:
-		*(*int16)(ptr) = v
-	case int32:
-		*(*int32)(ptr) = v
-	case int64:
-		*(*int64)(ptr) = v
-	case float32:
-		*(*float32)(ptr) = v
-	case float64:
-		*(*float64)(ptr) = v
-	case string:
-		*(*string)(ptr) = v
-	case *uintptr:
-		*v = *(*uintptr)(ptr)
-	case *uint8:
-		*v = *(*uint8)(ptr)
-	case *uint16:
-		*v = *(*uint16)(ptr)
-	case *uint32:
-		*v = *(*uint32)(ptr)
-	case *uint64:
-		*v = *(*uint64)(ptr)
-	default:
-		setTypes(ptr, val)
-	}
-}
-
-// Get stores the value of what the allocated block has stored
-// inside the value, as long as the value is a reference.
-//
-// Is a user-friendly way to get a value out of an allocated block.
-// Arguably, it's not the fastest way to get a value out of an allocated block.
-// It's just a convenience method.
-//
-// It uses a lot of reflection, which are inherently slow.
-// But if you don't care about performance, this is the way to go.
-//
-// Otherwise, you can use the more hacky and unsafe way of going with
-// unsafe casting (e.g. *int32(unsafe.Pointer(b.Addr()))),
-// which avoids all the reflections and switch cases.
-func (b *AllocatedBlock) Get(value interface{}) {
-	at := unsafe.Pointer(b.Addr())
-	toValue := reflect.ValueOf(value)
-	getAnyTypeTo(at, toValue)
-}
-
 func (cb *chunkBlock) copy(dst *chunkBlock) error {
 	src := cb
 	srcSize := src.size.Load()
@@ -580,4 +516,12 @@ func (cb *chunkBlock) copy(dst *chunkBlock) error {
 	copy(destSlice, srcSlice)
 
 	return nil
+}
+
+func Get[T any](block *AllocatedBlock) T {
+	return *(*T)(unsafe.Pointer(block.Addr()))
+}
+
+func Set[T any](block *AllocatedBlock, value T) {
+	*(*T)(unsafe.Pointer(block.Addr())) = value
 }

@@ -41,7 +41,7 @@ func (suite *AllocatorTestSuite) TestSet() {
 			suite.FailNow("Failed to allocate block", err)
 		}
 
-		*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())) = [10]MyStruct{{8, 3.14, "test data"}}
+		Set[[10]MyStruct](myArr, [10]MyStruct{{8, 3.14, "test data"}})
 		suite.Equal(8, (*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())))[0].a)
 		suite.Equal(3.14, (*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())))[0].b)
 		suite.Equal("test data", (*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())))[0].c)
@@ -64,7 +64,7 @@ func (suite *AllocatorTestSuite) TestSet() {
 
 		suite.Equal(block.IsFreed(), false)
 
-		block.Set(data)
+		Set(block, data)
 
 		var got string
 		*(*string)(unsafe.Pointer(&got)) = *(*string)(unsafe.Pointer(block.Addr()))
@@ -92,15 +92,19 @@ func (suite *AllocatorTestSuite) TestGet() {
 			suite.FailNow("Failed to allocate block", err)
 		}
 
-		*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())) = [10]MyStruct{{8, 2.0, ""}}
-		suite.Equal(8, (*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())))[0].a)
-
 		var got [10]MyStruct
-		myArr.Get(&got)
 
-		suite.Equal(8, got[0].a)
-		suite.Equal(2.0, got[0].b)
-		suite.Equal("", got[0].c)
+		*(*[10]MyStruct)(unsafe.Pointer(myArr.Addr())) = [10]MyStruct{{14, 3.14, "bruh"}}
+		got = *(*[10]MyStruct)(unsafe.Pointer(myArr.Addr()))
+		suite.Equal(14, got[0].a)
+		suite.Equal(3.14, got[0].b)
+		suite.Equal("bruh", got[0].c)
+
+		got = Get[[10]MyStruct](myArr)
+
+		suite.Equal(14, got[0].a)
+		suite.Equal(3.14, got[0].b)
+		suite.Equal("bruh", got[0].c)
 
 		err = suite.allocator.Free(myArr)
 		if err != nil {
@@ -118,8 +122,7 @@ func (suite *AllocatorTestSuite) TestGet() {
 		testGot := *(*[3]string)(unsafe.Pointer(block.Addr()))
 		suite.Equal(testGot, *(*[3]string)(unsafe.Pointer(block.Addr())))
 
-		var got [3]string
-		block.Get(&got)
+		got := Get[[3]string](block)
 
 		suite.Equal(data, got)
 
@@ -139,8 +142,7 @@ func (suite *AllocatorTestSuite) TestGet() {
 		testGot := *(*string)(unsafe.Pointer(block.Addr()))
 		suite.Equal(testGot, *(*string)(unsafe.Pointer(block.Addr())))
 
-		var got string
-		block.Get(&got)
+		got := Get[string](block)
 
 		suite.Equal(data, got)
 
@@ -164,14 +166,13 @@ func (suite *AllocatorTestSuite) TestCopy() {
 	}
 
 	// Set data in srcBlock
-	srcBlock.Set(data)
+	Set[string](srcBlock, data)
 
 	// Copy data from srcBlock to dstBlock
 	err = suite.allocator.Copy(dstBloc, srcBlock)
 
 	// Get data from dstBlock
-	var got string
-	dstBloc.Get(&got)
+	got := Get[string](srcBlock)
 
 	suite.Equal(data, got)
 
@@ -212,7 +213,7 @@ func ExampleAllocatedBlock_Set() {
 	}
 
 	// Set data in the block
-	block.Set("test data")
+	Set[string](block, "test data")
 
 	// Free the block
 	err = Default().Free(block)
@@ -229,11 +230,11 @@ func ExampleAllocatedBlock_Get() {
 	}
 
 	// Set data in the block
-	block.Set("test data")
+	Set(block, "test data")
 
 	// Get data from the block
-	var got string
-	block.Get(&got)
+	got := Get[string](block)
+	print(got)
 
 	// Free the block
 	err = Default().Free(block)
@@ -256,7 +257,7 @@ func ExampleAllocatedBlock_Copy() {
 	}
 
 	// Set data in the srcBlock
-	srcBlock.Set("test data")
+	Set(srcBlock, "test data")
 
 	// Copy data from srcBlock to dstBlock
 	err = Default().Copy(dstBlock, srcBlock)
