@@ -15,13 +15,15 @@ var (
 )
 
 var (
-	ErrAllocatedBlockAlreadyFreed = fmt.Errorf("goumem: allocated block already freed")
+	ErrAllocatedBlockAlreadyFreed  = fmt.Errorf("goumem: allocated block already freed")
+	ErrAllocatedBlockDifferentSize = fmt.Errorf("goumem: allocated block different size")
 )
 
 type (
 	MemoryAllocator interface {
 		Alloc(size uintptr) (*AllocatedBlock, error)
 		Free(block *AllocatedBlock) error
+		Copy(dst, src *AllocatedBlock) error
 	}
 	allocationStrategy interface {
 		alloc(chunks *chunkList, size uintptr) (*AllocatedBlock, error)
@@ -328,41 +330,137 @@ func (b *AllocatedBlock) Size() uintptr {
 func (b *AllocatedBlock) IsFreed() bool {
 	return b.flags&AllocatedBlockFlagsFree != 0
 }
+
+func setTypes(ptr unsafe.Pointer, val reflect.Value) {
+	field := val
+	switch field.Kind() {
+	case reflect.Int:
+		*(*int)(ptr) = int(field.Int())
+	case reflect.Int8:
+		*(*int8)(ptr) = int8(field.Int())
+	case reflect.Int16:
+		*(*int16)(ptr) = int16(field.Int())
+	case reflect.Int32:
+		*(*int32)(ptr) = int32(field.Int())
+	case reflect.Int64:
+		*(*int64)(ptr) = field.Int()
+	case reflect.Float64:
+		*(*float64)(ptr) = field.Float()
+	case reflect.String:
+		*(*string)(ptr) = field.String()
+	case reflect.Bool:
+		*(*bool)(ptr) = field.Bool()
+	case reflect.Uintptr:
+		*(*uintptr)(ptr) = uintptr(field.Uint())
+	case reflect.Uint:
+		*(*uint)(ptr) = uint(field.Uint())
+	case reflect.Uint8:
+		*(*uint8)(ptr) = uint8(field.Uint())
+	case reflect.Uint16:
+		*(*uint16)(ptr) = uint16(field.Uint())
+	case reflect.Uint32:
+		*(*uint32)(ptr) = uint32(field.Uint())
+	case reflect.Uint64:
+		*(*uint64)(ptr) = uint64(field.Uint())
+	case reflect.Complex64:
+		*(*complex64)(ptr) = (complex64)(field.Complex())
+	case reflect.Complex128:
+		*(*complex128)(ptr) = field.Complex()
+	case reflect.Ptr:
+		setPtr(ptr, field)
+	case reflect.Struct:
+		setStruct(ptr, field)
+	case reflect.Array, reflect.Slice:
+		setArrayOrSlice(ptr, field)
+	case reflect.Map:
+		setMap(ptr, val)
+	default:
+		panic("unsupported type")
+	}
+}
+
 func setStruct(ptr unsafe.Pointer, val reflect.Value) {
 	for i := 0; i < val.NumField(); i++ {
 		field := val.Field(i)
 		switch field.Kind() {
-		case reflect.Int:
-			*(*int)(ptr) = int(field.Int())
-		case reflect.Float64:
-			*(*float64)(ptr) = field.Float()
-		case reflect.String:
-			*(*string)(ptr) = field.String()
-		case reflect.Struct:
-			setStruct(ptr, field)
 		default:
-			panic("unsupported type")
+			setTypes(ptr, field)
 		}
+	}
+}
+
+// getANyType
+//
+// @atPtr: pointer to the address of the value to be set
+//
+// @from: the value to be set, from which also the type is inferred. So, make sure the type of the value is correct, with respect to the type of the pointer.
+func getAnyTypeTo(atPtr unsafe.Pointer, from reflect.Value) {
+	var realType reflect.Type
+	var realValueRefl reflect.Value
+	refRealValueRefl := from
+
+	realValueRefl = from
+	realType = from.Type()
+
+	// figure out if its a pointer
+	// if it is, get the element type
+	switch realType.Kind() {
+	case reflect.Ptr:
+		realType = from.Type().Elem()
+	default:
+		realType = from.Type()
+	}
+
+	switch realType.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		refRealValueRefl.Elem().SetInt(int64(*(*int)(atPtr)))
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		refRealValueRefl.Elem().SetUint(uint64(*(*uint)(atPtr)))
+	case reflect.Float32, reflect.Float64:
+		refRealValueRefl.Elem().SetFloat(float64(*(*float64)(atPtr)))
+	case reflect.Complex64, reflect.Complex128:
+		refRealValueRefl.Elem().SetComplex(complex128(*(*complex128)(atPtr)))
+	case reflect.Array, reflect.Slice:
+		getArrayOrSlice(atPtr, realValueRefl)
+	case reflect.Struct:
+		getStruct(atPtr, realValueRefl)
+	case reflect.Ptr:
+		getPtr(atPtr, realValueRefl)
+	case reflect.Map:
+		getMap(atPtr, realValueRefl)
+	case reflect.String:
+		refRealValueRefl.Elem().SetString(*(*string)(atPtr))
+	case reflect.Bool:
+		refRealValueRefl.Elem().SetBool(*(*bool)(atPtr))
+	default:
+		panic("unsupported type")
+	}
+}
+
+func getMap(ptr unsafe.Pointer, val reflect.Value) {
+	for _, key := range val.MapKeys() {
+		elem := val.MapIndex(key)
+		switch elem.Kind() {
+		default:
+			getAnyTypeTo(ptr, elem)
+		}
+	}
+}
+
+func getPtr(ptr unsafe.Pointer, val reflect.Value) {
+	switch val.Kind() {
+	default:
+		// get elem
+		val = val.Elem()
+		getAnyTypeTo(ptr, val)
 	}
 }
 
 func getStruct(ptr unsafe.Pointer, val reflect.Value) {
 	for i := 0; i < val.NumField(); i++ {
-		field := val.Field(i)
-		switch field.Kind() {
-		case reflect.Int:
-			field.SetInt(int64(*(*int)(ptr)))
-		case reflect.Float64:
-			field.SetFloat(float64(*(*float64)(ptr)))
-		case reflect.String:
-			field.SetString(string(*(*string)(ptr)))
-		case reflect.Struct:
-			getStruct(ptr, field)
-		case reflect.Array, reflect.Slice:
-			getArrayOrSlice(ptr, field)
-		default:
-			panic("unsupported type")
-		}
+		valAtIndex := val.Elem().Index(i)
+		ptrAtIndex := unsafe.Pointer(uintptr(ptr) + val.Elem().Index(i).Type().Size())
+		getAnyTypeTo(ptrAtIndex, valAtIndex)
 	}
 }
 
@@ -370,80 +468,116 @@ func setArrayOrSlice(ptr unsafe.Pointer, val reflect.Value) {
 	for i := 0; i < val.Len(); i++ {
 		elem := val.Index(i)
 		switch elem.Kind() {
-		case reflect.Int:
-			*(*int)(ptr) = int(elem.Int())
-		case reflect.Float64:
-			*(*float64)(ptr) = elem.Float()
-		case reflect.String:
-			*(*string)(ptr) = elem.String()
-		case reflect.Struct:
-			setStruct(ptr, elem)
-		case reflect.Array, reflect.Slice:
-			setArrayOrSlice(ptr, elem)
 		default:
-			panic("unsupported type")
+			getAnyTypeTo(ptr, val)
 		}
 	}
 }
 
 func getArrayOrSlice(ptr unsafe.Pointer, val reflect.Value) {
 	for i := 0; i < val.Len(); i++ {
-		elem := val.Index(i)
+		valAtIndex := val.Elem().Index(i)
+		ptr = unsafe.Pointer(uintptr(ptr) + val.Elem().Index(i).Type().Size())
+		getAnyTypeTo(ptr, valAtIndex)
+	}
+}
+
+func setMap(ptr unsafe.Pointer, val reflect.Value) {
+	for _, key := range val.MapKeys() {
+		elem := val.MapIndex(key)
 		switch elem.Kind() {
-		case reflect.Int:
-			elem.SetInt(int64(*(*int)(ptr)))
-		case reflect.Float64:
-			elem.SetFloat(float64(*(*float64)(ptr)))
-		case reflect.String:
-			elem.SetString(string(*(*string)(ptr)))
-		case reflect.Struct:
-			getStruct(ptr, elem)
 		default:
-			panic("unsupported type")
+			setTypes(ptr, elem)
 		}
 	}
 }
 
+func setPtr(ptr unsafe.Pointer, val reflect.Value) {
+	switch val.Kind() {
+	default:
+		// get elem
+		val = val.Elem()
+		setTypes(ptr, val)
+	}
+}
+
+// Set stores the value inside the allocated block.
+//
+// Is a user-friendly way to set a value inside an allocated block.
+// Arguably, it's not the fastest way to set a value inside an allocated block.
+// It's just a convenience method.
+// It uses a lot of reflection, which are inherently slow.
+//
+// Otherwise, you can use the more hacky and unsafe way of going with
+// unsafe casting (e.g. *int32(unsafe.Pointer(b.Addr())) = 8),
+// which avoids all the reflections and switch cases.
 func (b *AllocatedBlock) Set(value interface{}) {
 	ptr := unsafe.Pointer(b.Addr())
+	val := reflect.ValueOf(value)
 	switch v := value.(type) {
 	case int:
 		*(*int)(ptr) = v
+	case int8:
+		*(*int8)(ptr) = v
+	case int16:
+		*(*int16)(ptr) = v
+	case int32:
+		*(*int32)(ptr) = v
+	case int64:
+		*(*int64)(ptr) = v
+	case float32:
+		*(*float32)(ptr) = v
 	case float64:
 		*(*float64)(ptr) = v
 	case string:
 		*(*string)(ptr) = v
+	case *uintptr:
+		*v = *(*uintptr)(ptr)
+	case *uint8:
+		*v = *(*uint8)(ptr)
+	case *uint16:
+		*v = *(*uint16)(ptr)
+	case *uint32:
+		*v = *(*uint32)(ptr)
+	case *uint64:
+		*v = *(*uint64)(ptr)
 	default:
-		val := reflect.ValueOf(value)
-		switch val.Kind() {
-		case reflect.Struct:
-			setStruct(ptr, val)
-		case reflect.Array, reflect.Slice:
-			setArrayOrSlice(ptr, val)
-		default:
-			panic("unsupported type")
-		}
+		setTypes(ptr, val)
 	}
 }
 
+// Get stores the value of what the allocated block has stored
+// inside the value, as long as the value is a reference.
+//
+// Is a user-friendly way to get a value out of an allocated block.
+// Arguably, it's not the fastest way to get a value out of an allocated block.
+// It's just a convenience method.
+//
+// It uses a lot of reflection, which are inherently slow.
+// But if you don't care about performance, this is the way to go.
+//
+// Otherwise, you can use the more hacky and unsafe way of going with
+// unsafe casting (e.g. *int32(unsafe.Pointer(b.Addr()))),
+// which avoids all the reflections and switch cases.
 func (b *AllocatedBlock) Get(value interface{}) {
-	ptr := unsafe.Pointer(b.Addr())
-	switch v := value.(type) {
-	case *int:
-		*v = *(*int)(ptr)
-	case *float64:
-		*v = *(*float64)(ptr)
-	case *string:
-		*v = *(*string)(ptr)
-	default:
-		val := reflect.ValueOf(value)
-		switch val.Kind() {
-		case reflect.Struct:
-			getStruct(ptr, val)
-		case reflect.Array, reflect.Slice:
-			getArrayOrSlice(ptr, val)
-		default:
-			panic("unsupported type")
-		}
+	at := unsafe.Pointer(b.Addr())
+	toValue := reflect.ValueOf(value)
+	getAnyTypeTo(at, toValue)
+}
+
+func (cb *chunkBlock) copy(dst *chunkBlock) error {
+	src := cb
+	srcSize := src.size.Load()
+	destSize := dst.size.Load()
+
+	if srcSize != destSize {
+		return ErrAllocatedBlockDifferentSize
 	}
+
+	srcSlice := (*(*[1 << 30]byte)(unsafe.Pointer(src.addr.Load())))[:srcSize:srcSize]
+	destSlice := (*(*[1 << 30]byte)(unsafe.Pointer(dst.addr.Load())))[:destSize:destSize]
+
+	copy(destSlice, srcSlice)
+
+	return nil
 }

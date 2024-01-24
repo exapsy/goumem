@@ -144,3 +144,21 @@ func (a *defaultMemoryAllocator) Free(block *AllocatedBlock) error {
 
 	return a.strategy.free(a.chunks, block)
 }
+
+func (a *defaultMemoryAllocator) Copy(dst, src *AllocatedBlock) error {
+	if dst.flags&AllocatedBlockFlagsFree != 0 {
+		return ErrAllocatedBlockAlreadyFreed
+	}
+
+	if src.flags&AllocatedBlockFlagsFree != 0 {
+		return ErrAllocatedBlockAlreadyFreed
+	}
+
+	if dst.size != src.size {
+		return ErrAllocatedBlockDifferentSize
+	}
+
+	dst.chunkBlockMem.copy(src.chunkBlockMem)
+
+	return nil
+}

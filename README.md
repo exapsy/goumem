@@ -13,15 +13,16 @@ the way C does it, by using `mmap` for unix systems or the `KERNEL32 - VirtualAl
 
 ## Is it ready
 
-No. But for now you may look for how you may implement your own custom implementation if you want.
+X **No.**
 
 ## TODO:
 
 - [x] Support for allocation strategies & policies
 - [x] Support for chunked memory allocation
-- [x] Support for pools
-- [ ] Support for resizing pools
-- [ ] Allocator doesn't allocate each time directly from CPU, but uses page-based chunks - and allocates new chunk per need.
+- [x] Allocator doesn't allocate each time directly from CPU, but uses page-based chunks - and allocates new chunk per need.
+- [ ] Support for arenas
+- [ ] Support for resizing arenas (growing and shrinking)
+- [ ] Removing unused arenas
 
 ## Supports
 
@@ -31,60 +32,98 @@ No. But for now you may look for how you may implement your own custom implement
 ## Installation
 
 ```bash
-go get github.com/exapsy/goumem
+go get -u github.com/exapsy/goumem
 ```
 
-## Why
+## Usage
 
-**Golang** has **Garbage Collector**.
+### As simple as it goes
 
-This, is not inherently bad. Quite the opposite! A garbage collector saves you from the effort of
+```go
+package main
 
-- Tracking objects
-- Deallocating objects
-- Many memory leaks (memory leaks always can happen, but now it's very-very difficult!)
-- Batch de-allocation
-- Strategic colored de-allocations
-- Means MUCH less CPU calling for free-ing objects which is VERY time consuming
-- Very confusing bugs
-- Leaks!!!!
+import (
+    "fmt"
 
-But, what a garbage collector doesn't do, is allocating and deallocating at will.
-Sometimes, this is quite important, as you know that "hey, I won't be needing this batch of memory anymore and it takes MUCH memory,
-and they're already many objects for GC to track, so I would like to deallocate them myself".
+    "github.com/exapsy/goumem"
+)
 
-In general, all these good things that I mentioned about GC, come at a cost. CPU and Memory.
+func main() {
+    // Allocate 100 bytes
+    block, err := goumem.Alloc(100)
+    if err != nil {
+        panic(err)
+    }
+	
+    // Write to the memory
+	block.Set("Hello World!")
+	
+    // Read from the memory
+    var data string
+	block.Get(&data)
 
-- When you allocate an object with GC, you essentially say "Hey, GC, keep track of this object"
-- When you want to de-allocate it, you simply can't. And that may be a good thing when you don't batch-deallocate, like with memory arenas or pools, but when you actually do have memory pools and you know what you're doing, and you need that extra juice, GC just doesn't give it to you. It will simply track these objects to their literal death. Which, if you're working on very performing tasks, or on very small machines with very little memory or CPU process, may be very crucial! 
+    // Free the memory
+    goumem.Free(mem)
 
-In general, Garbage Collection is not bad. I've heard that argument quite a lot of times because of all the clout around "manual memory management good but unsafe, GC bad but safe", when it couldn't be further from the truth.
+    // Allocate 100 bytes
+    mem, err = goumem.Alloc(100)
+    if err != nil {
+        panic(err)
+    }
 
-But, GC comes at a good cost when you actually have different needs. Memory batching for de-allocation is nice, but if I already know this is quite a big batch and I don't have so much memory, and I don't have such a good processor or I want to keep track of a million objects either, I would probably like to have some control over how I allocate and de-allocate memory.
+    // Free the memory
+    goumem.Free(mem)
+}
+```
 
-Remember, manual memory management is not good by itself. It's only good if you know how to use good patterns. Otherwise, a very simple GC will be MUCH better at benchmarks than your "manual memory management".
+## Where we've:
 
-That's why we implement Memory arenas, pools and batching. Because we don't wanna call the CPU so many times. The distance between the CPU nd the memory and back to context switch to your program is like going from the moon to the sun and back, in computer terms. You don't want just to have manual memory allocation. You want to know WHEN to manually memory allocate, and when to use mutexes because they cost a lot to memory allocate as well, when to use GC instead because it may come at less cost both in maintenance and cost maybe.
+### Seen vast improvements
 
-That's it. Neither is good or bad. Both have their extremely good usecases, and even worse, manual memory allocation has many caveats and you have to know what you're doing and why. So, use with care, and always Free(obj)!
+- GC needs a lot of processing power in order to operate. Tracking objects, doing a lot of operations, etc. 
+- GC needs a lot of memory in order to operate. It needs to keep track of all these objects, and it needs to keep them in memory until it's time to de-allocate them.
+- GC while it's good at batch-deallocation when you don't want the "extra juice" and you don't care, when you actually care about the extra juice, it's not good at all. It will keep track of these objects until the end of time, and it will de-allocate them at the end of time. Which is not good if you want to de-allocate them at will.
+- In order to do anything in GC there are a LOT of operations that need to be done. With a direct memory allocation, you just allocate and de-allocate. With GC, you need to allocate, keep track of the object, and then de-allocate. And that's just the tip of the iceberg. There are many more operations that need to be done in order to keep track of these objects, and that's why GC is slower by its nature.
+- Pools are an especially good example of why you would need a direct memory allocation. You don't want to keep track of all these objects, you just want to allocate and de-allocate at will. And GC is not good at that. It will keep track of these objects until the end of time, and it will de-allocate them at the end of time. Which is not good if you want to de-allocate them at will.
+- When you actually don't want all that tracking = all that extra CPU processing = all that extra memory
+- You want to allocate and de-allocate at will
+- Performance improvements and MUCH lower operations per nanosecond have been observed when using the non-GC memory allocation method.
+- It's much more direct, and it's much more simple. It's just a memory allocation and de-allocation. No tracking, no nothing. 
+- You don't have a powerful machine, and you want to squeeze the most out of it.
 
-### Why do you have single-object allocators
+In these situations, **GC** is likely not the way to go.
 
-Things like `NewInt(5)` exist for the sole purpose of if you wanted to use an allocator on a device that simply doesn't acquire much memory. Such as an arduino. Memory sometimes is very crucial, as CPU is too, and GC acquires much CPU on tracking these objects, and Memory also is acquired to keep these objects till the Garbage Collector is called over an interval of time.
+**GC** is an autonomous system by its nature.
 
-These will be kept for this sole purpose. But I can see that
+It that does things the way it wants to do them, and it's good at that, but it comes at a cost.
 
-- People may misuse them because they think "manual memory allocation is better" just "because".
-- It's a small use-case.
+### Seen that GC is more optimal
 
-But I want Golang to be able to perform these tasks with a simple library when in need rather than having to implement your own, and be improved over the interval of time.
+Just to come clear.
 
+**GC** is not bad, it's not the evil, it's actually very good at its job.
+
+It's nice for its purpose, and it does it more than well.
+
+That is also not necessarily bad or good. It's just a different way of doing things. And it's good to have both options.
+
+For example a manual memory allocation is bad when
+
+- You don't know what you're doing
+- You don't know when/how/why to use it
+- Memory leaks are probable to happen. Especially if you don't follow good practices.
+- You don't want usually to batch de-allocate, for which GC is good at.
+- Keeping track of objects, for which GC is good at.
+- Thinking about memory allocation and de-allocation, for which GC is good at.
+- Your program is short-lived and doesn't need much memory allocation and de-allocation, for which GC is good at. Like I would understand why a program like `jq` which decodes many amount of objects and probably does many allocations and de-allocations, would need it, but not why a program like `ls` would need it which usually prints a very small amount of objects and most likely doesn't do much memory allocation and de-allocation. Maybe bad example ... but you get my point. Don't rage at me at the issues about it.
 
 ## Benchmark
 
-Admittedly, the benchmark was run on purpose while I was running Chrome behind with a youtube video because I know it takes quite a lot of CPU processing and RAM. It's the purpose of this benchmark to show the contrast between the custom memory allocation versus garbage collection for this specific benchmark that I used it for.
+**Methodology**
 
-It's a benchmark over pool of:
+Summing up **100000** `float64` matrices of **100x100**.
+
+**Parameters**
 
 ```go
 const (
@@ -106,7 +145,6 @@ BenchmarkCustomMemory-12              10        25098256116 ns/op         400600
 BenchmarkGCMemory-12                   9        28630349082 ns/op       9229073352 B/op 10100069 allocs/op
 PASS
 ok      github.com/exapsy/goumem        561.607s
-
 ```
 
 ## Examples
