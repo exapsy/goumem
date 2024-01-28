@@ -15,6 +15,9 @@ the way C does it, by using `mmap` for unix systems or the `KERNEL32 - VirtualAl
 
 X **No.**
 
+And Golang doesn't let me see into the heap, so I can't test some things properly,
+like I could with C.
+
 ## TODO:
 
 - [x] Support for allocation strategies & policies
@@ -60,7 +63,7 @@ func main() {
 	
     // Read from the memory
     var data string
-	block.Get(&data)
+    block.Get(&data)
 
     // Free the memory
     goumem.Free(mem)
@@ -146,7 +149,3 @@ BenchmarkGCMemory-12                   9        28630349082 ns/op       92290733
 PASS
 ok      github.com/exapsy/goumem        561.607s
 ```
-
-## Examples
-
-Incoming, not a stable version yet.
