@@ -18,6 +18,25 @@ X **No.**
 And Golang doesn't let me see into the heap, so I can't test some things properly,
 like I could with C.
 
+## Will it ever be?
+
+X **I don't know if it's even worth it.**
+
+Golang community even rejected https://github.com/golang/go/issues/51317 (proposal: arena: new package providing memory arenas #51317).
+It seems like the community is very rejective on utilitarian approaches and is very conservative when it comes to safety.
+
+Which I can understand to a certain point, but it's certainly just unproductive when you want to make something more performant that could benefit from having such arenas or ad-hoc memory allocation instead of having an automated "robot" we call "Garbage collector" do that for us. I as a programmer would definitely prefer to be given the controller sometimes and do whatever I want because maybe, I know better than the program sometimes.
+
+So, the whole thing over "safety" made me, as the contributor of this repository, not so eager to complete this project.
+
+The delve debugger simply doesn't support low-level heap debugging. 
+Golang is trying actively to make your job harder when you're dealing with low level "unsafe code".
+It's all just discouraging.
+
+Maybe I will take a look once in a while on this repository just to take a look or to actually develop something.
+
+But I promise nothing.
+
 ## TODO:
 
 - [x] Support for allocation strategies & policies
@@ -26,6 +45,7 @@ like I could with C.
 - [ ] Support for arenas
 - [ ] Support for resizing arenas (growing and shrinking)
 - [ ] Removing unused arenas
+- [ ] Support for `StringBuilder` type
 
 ## Supports
 
